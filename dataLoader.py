@@ -72,7 +72,9 @@ def get_data(planet = 0, scaleMethod='min-max'):
         X = np.roll(traj, shift = 1, axis = 0)[1:]
         X = np.insert(X, 0, 1, axis=1)
         Y = traj[1:]
-    
-    return scale, offset, train_test_split(X, Y, test_size=0.33, random_state=RANDOM_SEED)
+
+    trainSplit = int(0.66 * traj.shape[0])
+    return scale, offset, (X[:trainSplit], X[trainSplit:], Y[:trainSplit], Y[trainSplit:])
+    #return scale, offset, train_test_split(X, Y, test_size=0.33, random_state=RANDOM_SEED)
 
 get_data(0)

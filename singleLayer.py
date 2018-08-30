@@ -14,10 +14,12 @@
 # Similarly, for h * W_2 + b_2
 
 import os
+import random
 import tensorflow as tf
 import numpy as np
 
 from sklearn import datasets
+from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 
 from dataLoader import get_data
@@ -40,7 +42,7 @@ datasets = [
 
 def init_weights(shape):
     """ Weight initialization """
-    weights = tf.random_normal(shape, mean= 0, stddev=1)
+    weights = tf.random_normal(shape, mean= 0, stddev=0.6)
     return tf.Variable(weights)
 
 def forwardprop(X, w_1, w_2, w_3):
@@ -59,13 +61,14 @@ def main():
 
     # Layer's sizes
     x_size = train_X.shape[1]   # Number of input nodes: 4 features x, y, dx, dy
-    h_size =32                  # Number of hidden nodes
+    h_size = 32                  # Number of hidden nodes
     h1_size = 16                  # Number of hidden nodes
     y_size = train_y.shape[1]   # Number of outcomes 4 features x, y, dx, dy
 
     # Symbols
     X = tf.placeholder("float", shape=[None, x_size])
     y = tf.placeholder("float", shape=[None, y_size])
+    lr = tf.placeholder("float", shape=[])
 
     # Weight initializations
     w_1 = init_weights((x_size, h_size))
@@ -77,33 +80,42 @@ def main():
 
     # Backward propagation
     cost    = tf.reduce_mean(tf.losses.mean_squared_error(labels=y,predictions=yhat))
-    updates = tf.train.AdamOptimizer(1).minimize(cost)
+    updates = tf.train.AdamOptimizer(learning_rate=lr).minimize(cost)
 
     # Run SGD
     sess = tf.Session()
     init = tf.global_variables_initializer()
     sess.run(init)
 
-    naive_accuracy  = np.mean(np.abs(test_y - test_X[:,1:]), axis = 0)
+    naive_accuracy  = np.mean((test_y - test_X[:,1:])**2, axis = 0)
     print('Naive Accruacy:', naive_accuracy)
 
-    for epoch in range(10000):
-        # Train with each example
-        for i in range(len(train_X)):
-            sess.run(updates, feed_dict={X: train_X[i: i + 1], y: train_y[i: i + 1]})
+    constant_momentum_1 = 2 * test_X  - np.roll(test_X, 1,axis=0)
+    baseline_accuracy  = np.mean((test_y[1:] - constant_momentum_1[1:,1:])**2, axis = 0)
+    print('Momentum Accruacy:', baseline_accuracy)
 
-        train_accuracy = np.mean(np.abs(train_y - sess.run(yhat, feed_dict={X: train_X, y: train_y})), axis = 0)
-        test_accuracy  = np.mean(np.abs(test_y - sess.run(yhat, feed_dict={X: test_X, y: test_y})), axis = 0)
+
+    for epoch in range(10000):
+        learning_rate = 0.005 * 0.99**epoch
+        # Train with each example
+        for _ in range(1200):  
+            sess.run(updates, feed_dict={X: train_X, y: train_y, lr:learning_rate})
+
+        train_accuracy = np.mean((train_y - sess.run(yhat, feed_dict={X: train_X, y: train_y}))**2, axis = 0)
+        test_accuracy  = np.mean((test_y - sess.run(yhat, feed_dict={X: test_X, y: test_y}))**2, axis = 0)
+
+        train_accuracy = mean_squared_error(train_y, sess.run(yhat, feed_dict={X: train_X, y: train_y}))
+
         
 
-        print("Epoch = %d" % (epoch + 1))
+        print("Epoch = %d lr = %f" % (epoch + 1, learning_rate))
         print('Train Accuracy:', train_accuracy)
         print('Test Accuracy:', test_accuracy)
-        pos = np.sum((naive_accuracy / train_accuracy )[0:2])
-        vel = np.sum((naive_accuracy / train_accuracy )[2:])
+        pos = np.sum((baseline_accuracy / train_accuracy )[0:2])
+        vel = np.sum((baseline_accuracy / train_accuracy )[2:])
         print("Test vs Baseline: pos: {:.2%} vel: {:.2%}".format(pos, vel))
-        pos = np.sum((naive_accuracy / test_accuracy )[0:2])
-        vel = np.sum((naive_accuracy / test_accuracy )[2:])
+        pos = np.sum((baseline_accuracy / test_accuracy )[0:2])
+        vel = np.sum((baseline_accuracy / test_accuracy )[2:])
         print("Train vs Baseline: pos: {:.2%} vel: {:.2%}".format(pos, vel))
         
 

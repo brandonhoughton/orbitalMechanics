@@ -1,3 +1,6 @@
 # Data folder
 /trajectories/
 trajectories.zip
+
+*.json
+*.pyc
