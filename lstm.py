@@ -6,16 +6,17 @@ import keras.layers as layers
 def createModel(inputSize, timesteps, hiddenSize):
     rnn = keras.models.Sequential()
 
-    inputLayer = layers.SimpleRNN(hiddenSize,
-        input_shape=(timesteps, inputSize),
-        name='input')
+    inputLayer = layers.LSTM(
+        32,
+        return_sequences=True,
+        input_shape=(timesteps, inputSize))
+    rnn.add(inputLayer)
 
-    recurrentLayer = layers.SimpleRNN(
-        inputLayer,
-        return_sequences=True, 
-        unroll=True, 
-        name='rnn_layer')
+    recurrentLayer = layers.LSTM(
+        4)
     rnn.add(recurrentLayer)
+
+    #rnn.add(keras.layers.Flatten())
 
     rnn.compile(optimizer='adam', loss='mse')
 
@@ -24,6 +25,8 @@ def createModel(inputSize, timesteps, hiddenSize):
 
 def trainModel(model, dataGenerator):
     model.fit_generator(dataGenerator)   
+    #X, Y = dataGenerator[0]
+    #model.fit(x=X,y=Y)
 
 def evalModel(model):
     print('Score is 5')
@@ -40,7 +43,8 @@ def main():
         data, targets, timesteps, sampling_rate=1, stride=50, start_index=0, 
         end_index=None, shuffle=False, reverse=False, batch_size=128)
 
-    trainModel(model, dataGenerator)
+    for _ in range(100):
+        trainModel(model, dataGenerator)
 
     evalModel(model)
 
