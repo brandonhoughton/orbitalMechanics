@@ -22,7 +22,6 @@ RANDOM_SEED = 42
 # Expects a 4xn vector with the first two components representing position 
 # and the next two components representing the first derivative of position
 def scaleOrbit(vector, method='min-max'):
-
     if (method == 'physical'):
         # Shift position components
         offset = np.append(np.mean(vector[0:2,:],axis=1), np.zeros(2))
@@ -45,17 +44,20 @@ def scaleOrbit(vector, method='min-max'):
     elif (method == 'none'):
         return np.ones(4), np.ones(4), vector
     else:
-        # Shift position components
-        offset = np.mean(vector,axis=1)
-        scale = 1 / np.var(vector, axis=1)
-        vector = (vector.transpose() - offset).transpose()
-        vector = (vector.transpose() * scale).transpose()
-
-        return scale, offset, vector
+        raise(Exception("Not implemented"))
 
 
+def getBenchmark(test_X, test_Y, method):
+    if method == 'momentum':
+        constant_momentum = 2 * test_X  - np.roll(test_X, 1,axis=0)
+        baseline_accuracy  = np.mean((test_Y[1:] - constant_momentum[1:,1:])**2, axis = 0)
+        return (baseline_accuracy, constant_momentum)
+    else:
+        raise(Exception("Not implemented"))
 
-def get_data(planet = 0, scaleMethod='min-max'):
+
+
+def get_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum', shuffle= True):
     """ Read the specified orbit and shape it for regression"""   
 
     X = []
@@ -73,8 +75,57 @@ def get_data(planet = 0, scaleMethod='min-max'):
         X = np.insert(X, 0, 1, axis=1)
         Y = traj[1:]
 
-    trainSplit = int(0.66 * traj.shape[0])
-    return scale, offset, (X[:trainSplit], X[trainSplit:], Y[:trainSplit], Y[trainSplit:])
-    #return scale, offset, train_test_split(X, Y, test_size=0.33, random_state=RANDOM_SEED)
+    (train_X, test_X, train_Y, test_Y) = train_test_split(X, Y, test_size=0.33, random_state=RANDOM_SEED, shuffle=shuffle)
 
-get_data(0)
+    benchmarkResult = getBenchmark(X, Y, method=benchmarkMethod)
+
+    return scale, offset, (train_X, test_X, train_Y, test_Y), benchmarkResult
+
+
+def get_russ_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum', shuffle= True):
+    """ Read the specified orbit and shape it for regression"""   
+
+    X = []
+    Y = []
+
+    # Load the data to predict the next location and velocity
+    with np.load(J(dataDir,datasets[planet])) as data:
+        traj = data['traj']
+        f = data['F']
+
+
+        traj = np.reshape(np.reshape(traj, (-1,1), order='F'),(-1,4))
+        f = np.reshape(np.reshape(f, (-1,1), order='F'),(-1,4))
+
+        print(traj)
+        print(f)
+
+
+        X = np.roll(traj, shift = 1, axis = 0)[1:]
+        X = np.insert(X, 0, 1, axis=1)
+        Y = traj[1:]
+
+    return traj, F
+
+
+def get_raw_data(planet = 0, predictionHoizon = 1):
+    """ Read the specified orbit and shape it for regression"""   
+
+    X = []
+    Y = []
+
+    # Load the data to predict the next location and velocity
+    with np.load(J(dataDir,datasets[planet])) as data:
+        traj = data['traj']
+
+       
+
+        traj = np.reshape(np.reshape(traj, (-1,1), order='F'),(-1,4))
+
+        X = np.roll(traj, shift = predictionHoizon, axis = 0)[predictionHoizon:]
+        Y = traj[predictionHoizon:]
+
+        return X, Y
+        
+
+get_raw_data(0)

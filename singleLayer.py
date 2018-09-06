@@ -50,40 +50,33 @@ def forwardprop(X, w_1, w_2, w_3):
     Forward-propagation.
     IMPORTANT: yhat is not softmax since TensorFlow's softmax_cross_entropy_with_logits() does that internally.
     """
-    h    = tf.nn.relu(tf.matmul(X, w_1))  # The \sigma function
-    h2    = tf.nn.relu(tf.matmul(h, w_2))  # The \sigma function
+    h    = tf.nn.leaky_relu(tf.matmul(X, w_1))  # The \sigma function
+    h2    = tf.nn.leaky_relu(tf.matmul(h, w_2))  # The \sigma function
     yhat = tf.matmul(h2, w_3)  # The \varphi function
     return yhat
 
 def main():
-    scale, offset, (train_X, test_X, train_y, test_y) = get_data()
-    print(train_X.shape[0])
+    scale, offset, (train_X, test_X, train_y, test_y), benchmark = get_data()
 
     # Layer's sizes
     x_size = train_X.shape[1]   # Number of input nodes: 4 features x, y, dx, dy
-    h_size = 64                  # Number of hidden nodes
+    h_size = 256                  # Number of hidden nodes
     h1_size = 32                  # Number of hidden nodes
     y_size = train_y.shape[1]   # Number of outcomes 4 features x, y, dx, dy
 
-    # Symbols
-    
+    # Load data onto GPU memory
     with tf.device('/gpu:0'):
         X = tf.constant(train_X, dtype='float')
         y = tf.constant(train_y, dtype='float')
-
         X_test = tf.constant(test_X, dtype='float')
-        # Y_test = tf.constant(test_y, dtype='float')
 
-        # X = tf.placeholder("float", shape=[None, x_size])
-        # y = tf.placeholder("float", shape=[None, y_size])
+
         lr = tf.placeholder("float", shape=[])
 
         # Weight initializations
         w_1 = tf.Variable(np.random.randn(x_size, h_size)  * np.sqrt(2/x_size), dtype = 'float') #init_weights((x_size, h_size))
         w_2 = tf.Variable(np.random.randn(h_size, h1_size) * np.sqrt(2/h_size), dtype = 'float') #w_2 = init_weights((h_size, h1_size))
         w_3 = tf.Variable(np.random.randn(h1_size, y_size) * np.sqrt(2/h1_size), dtype = 'float') #w_3 = init_weights((h1_size, y_size))
-        
-        
 
         # Forward propagation
         yhat      = forwardprop(X, w_1, w_2, w_3)
@@ -101,14 +94,13 @@ def main():
         naive_accuracy  = np.mean((test_y - test_X[:,1:])**2, axis = 0)
         print('Naive Accruacy:', naive_accuracy)
 
-        constant_momentum_1 = 2 * test_X  - np.roll(test_X, 1,axis=0)
-        baseline_accuracy  = np.mean((test_y[1:] - constant_momentum_1[1:,1:])**2, axis = 0)
-        print('Momentum Accruacy:', baseline_accuracy)
+        baseline_accuracy, constant_momentum = benchmark
+        print('Benchmark Accruacy:', baseline_accuracy)
 
 
         for epoch in range(100000):
             learning_rate = 0.005 * 0.99**epoch
-            learning_rate = max(learning_rate, 0.0005)
+            learning_rate = max(learning_rate, 0.00002)
             # Train with each example   
             for _ in range(1200):  
                 sess.run(updates, feed_dict={lr:learning_rate})
