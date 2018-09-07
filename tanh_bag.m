@@ -35,15 +35,9 @@ T = length(xx);
 cc = max(xx')';
 cc2 = max(xxd')';
 
-%xx = xx ./ 1.0e+10; 
-%xxd = xxd ./ 1.0e+10; 
-
-%ss = std(xx'); 
-%xx = xx ./ (ss'*ones(1,T)); 
-
 w1 = 0.01*randn(dd,nh);
-%w1 = 0.000000000001*randn(dd,nh);
 w1 = w1 .* (1./cc*ones(1,nh)); 
+
 w2 = 0.1*randn(nh,1);
 
 

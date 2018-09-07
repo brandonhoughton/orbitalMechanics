@@ -101,11 +101,11 @@ def get_russ_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum',
         print(f)
 
 
-        X = np.roll(traj, shift = 1, axis = 0)[1:]
-        X = np.insert(X, 0, 1, axis=1)
-        Y = traj[1:]
+        # X = np.roll(traj, shift = 1, axis = 0)[1:]
+        # X = np.insert(X, 0, 1, axis=1)
+        # Y = traj[1:]
 
-    return traj, F
+    return traj, f
 
 
 def get_raw_data(planet = 0, predictionHoizon = 1):
