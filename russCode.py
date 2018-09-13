@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import time
 from dataLoader import get_russ_data, scaleOrbit
 
 
@@ -10,9 +11,9 @@ traj, f = get_russ_data()
 ######################
 
 inputDim = 4 #dd
-hiddenDim = 5 # nh
-outDim = 1 #od
-lr = 0.01
+hiddenDim = 50 # nh
+outDim = 4 #od
+lr = tf.constant(0.001)
 
 ######################
 
@@ -43,43 +44,79 @@ B2 = tf.Variable(np.zeros(outDim, np.float32))
 #X = tf.placeholder(tf.float32, shape=(None,4))
 #F = tf.placeholder(tf.float32, shape=(None,4))
 
-X = tf.constant(traj, dtype='float')
-F = tf.constant(f, dtype='float')
+# Wrap data in identity to tell tensorflow that these should not be treated as constant
+X = tf.identity(tf.constant(traj, dtype='float'))
+F = tf.identity(tf.constant(f, dtype='float'))
+
+X -= tf.expand_dims(tf.reduce_mean(X, axis=1), dim=-1)
+
+X /= tf.expand_dims(tf.reduce_max(X, axis=1), dim=-1) 
+F /= tf.expand_dims(tf.reduce_max(X, axis=1), dim=-1)
+
+# X = tf.layers.batch_normalization(X, training=True)
+# F = tf.layers.batch_normalization(F, training=True)
 
 
-logits = tf.matmul(X, W1) + B1
-logits3 = tf.matmul(logits, W2) + B2
-cost = tf.reduce_mean(tf.square(logits3))
 
+LAMBDA = 0.01
+# #Phi
+# logits = tf.sigmoid(tf.matmul(X, W1) + B1)
+# logits2 = tf.sigmoid(tf.matmul(logits, W2) + B2)
+
+
+head = tf.layers.dense(X, 50, activation=tf.nn.sigmoid)
+head = tf.layers.dense(head, 50, activation=tf.nn.sigmoid)
+logits2 = tf.layers.dense(head, 50)
+
+deltaPhi = tf.gradients(logits2,[X])[0]
+
+dotProd = tf.reduce_sum(tf.multiply(F, deltaPhi)/tf.expand_dims(tf.norm(F, axis=1)*tf.norm(deltaPhi, axis=1), dim=1), axis=1)
+gradTerm = tf.square(tf.norm(deltaPhi, axis=1) - 1)
+gradMag = tf.norm(deltaPhi, axis=1)
+#[dotProd, gradTerm] = ([dotProd, gradTerm])
+
+cost = tf.reduce_mean(tf.square(dotProd) + LAMBDA * gradTerm)
 
 
 # Setup gradients
-grad_W1, grad_B1, grad_W2, grad_B2 = tf.gradients(cost, [W1, B1, W2, B2])
-
-new_W1 = W1.assign(W1 - lr * grad_W1)
-new_B1 = B1.assign(B1 - lr * grad_B1)
-new_W2 = W2.assign(W2 - lr * grad_W2)
-new_B2 = B2.assign(B2 - lr * grad_B2)
+# cost = tf.Print(cost, [X, gradTerm])
+opt = tf.train.AdamOptimizer().minimize(cost)
 
 #####################
-train_epoch = 5000
+train_epoch = 50000
 display_step = 100
 #####################
-
+c = 0
+# avg_cost = 0
 # Training step
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
+    print("Grads for first step: ")
+    gradTermv, dotProdv = sess.run([ deltaPhi, dotProd])
+    print(gradTermv.shape, gradTermv)
+    print(dotProdv.shape, dotProdv)
+
+    #print(sess.run([grad_W1, grad_B1, grad_W2, grad_B2, prnt]))
+    print("... Grads for first step")
 
     # Training cycle
     for epoch in range(train_epoch):
         # Fit training using batch data
-        sess.run([new_W1, new_B1, new_W2, new_B2])
-        
-        # # Compute average loss
+      
+        # Compute average loss
         # avg_cost += c / total_batch
         # Display logs per epoch step
         if (epoch+1) % display_step == 0:
-            print(sess.run([W1, grad_W1]))
+            print("\nEpoch", epoch)
+            l2, gradTermv, dotProdv = sess.run([deltaPhi, gradMag, dotProd])
+            # print("ClipVal", l1)
+            print("GradPhi", l2)
+            print("GradMag", gradTermv)
+            print("DotProduct", dotProdv)
+            print("Current error, ", c)
+        c, _ = sess.run([cost, opt])
+        
+        # time.sleep(0.5)
 
 # Energy function calculation
 w1probs = 1 / (1 + np.exp(np.matmul(-w1.T, xx.T))) 
