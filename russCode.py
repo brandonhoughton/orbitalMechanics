@@ -58,15 +58,17 @@ F /= tf.expand_dims(tf.reduce_max(X, axis=1), dim=-1)
 
 
 
+
+
 LAMBDA = 0.01
 # #Phi
-# logits = tf.sigmoid(tf.matmul(X, W1) + B1)
-# logits2 = tf.sigmoid(tf.matmul(logits, W2) + B2)
+logits = tf.sigmoid(tf.matmul(X, W1) + B1)
+logits2 = tf.sigmoid(tf.matmul(logits, W2) + B2)
 
 
-head = tf.layers.dense(X, 50, activation=tf.nn.sigmoid)
-head = tf.layers.dense(head, 50, activation=tf.nn.sigmoid)
-logits2 = tf.layers.dense(head, 50)
+# head = tf.layers.dense(X, 50, activation=tf.nn.sigmoid)
+# head = tf.layers.dense(head, 50, activation=tf.nn.sigmoid)
+# logits2 = tf.layers.dense(head, 50)
 
 deltaPhi = tf.gradients(logits2,[X])[0]
 
@@ -75,7 +77,8 @@ gradTerm = tf.square(tf.norm(deltaPhi, axis=1) - 1)
 gradMag = tf.norm(deltaPhi, axis=1)
 #[dotProd, gradTerm] = ([dotProd, gradTerm])
 
-cost = tf.reduce_mean(tf.square(dotProd) + LAMBDA * gradTerm)
+meanDotProd = tf.reduce_mean(tf.abs(dotProd))
+cost = tf.reduce_mean(tf.abs(dotProd) + LAMBDA * gradTerm)
 
 
 # Setup gradients
@@ -83,8 +86,8 @@ cost = tf.reduce_mean(tf.square(dotProd) + LAMBDA * gradTerm)
 opt = tf.train.AdamOptimizer().minimize(cost)
 
 #####################
-train_epoch = 50000
-display_step = 100
+train_epoch = 5000000
+display_step = 1000
 #####################
 c = 0
 # avg_cost = 0
@@ -108,26 +111,33 @@ with tf.Session() as sess:
         # Display logs per epoch step
         if (epoch+1) % display_step == 0:
             print("\nEpoch", epoch)
-            l2, gradTermv, dotProdv = sess.run([deltaPhi, gradMag, dotProd])
+            l2, gradTermv, dotProdv, mdp = sess.run([deltaPhi, gradMag, dotProd, meanDotProd])
             # print("ClipVal", l1)
             print("GradPhi", l2)
             print("GradMag", gradTermv)
             print("DotProduct", dotProdv)
+            print("DotProdMag", mdp)
             print("Current error, ", c)
+
+            # Energy function calculation
+            w1, w2 = sess.run([W1, W2])
+            w1probs = 1 / (1 + np.exp(np.matmul(-w1.T, xx.T))) 
+            a = np.matmul(w2,np.ones((outDim,numExamples)))
+            b = (a * (w1probs * (1-w1probs))).T 
+            temp = np.matmul(b, w1.T) * xxd
+            temp1 = sum(temp, 2)
+            rowSum = np.sum(temp,axis=1) #
+            f1 = sum(temp1 * temp1)
+
+            E = np.matmul(w2.T, w1probs)  
+
+
+            print("F1:\n", f1)
+            print("E:\n",E)
+
         c, _ = sess.run([cost, opt])
         
         # time.sleep(0.5)
 
-# Energy function calculation
-w1probs = 1 / (1 + np.exp(np.matmul(-w1.T, xx.T))) 
-a = np.matmul(w2,np.ones((1,numExamples)))
-b = (a * (w1probs * (1-w1probs))).T 
-temp = np.matmul(b, w1.T) * xxd
-temp1 = sum(temp, 2)
-rowSum = np.sum(temp,axis=1) #
-f1 = sum(temp1 * temp1)
 
-E = np.matmul(w2.T, w1probs)  
 
-print(f1)
-print(E)
