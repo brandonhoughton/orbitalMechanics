@@ -12,7 +12,7 @@ traj, f = get_russ_data()
 
 inputDim = 4 #dd
 hiddenDim = 50 # nh
-outDim = 4 #od
+outDim = 1 #od
 lr = tf.constant(0.001)
 
 ######################
@@ -55,9 +55,6 @@ F /= tf.expand_dims(tf.reduce_max(X, axis=1), dim=-1)
 
 # X = tf.layers.batch_normalization(X, training=True)
 # F = tf.layers.batch_normalization(F, training=True)
-
-
-
 
 
 LAMBDA = 0.01
@@ -111,8 +108,9 @@ with tf.Session() as sess:
         # Display logs per epoch step
         if (epoch+1) % display_step == 0:
             print("\nEpoch", epoch)
-            l2, gradTermv, dotProdv, mdp = sess.run([deltaPhi, gradMag, dotProd, meanDotProd])
+            logits2d, l2, gradTermv, dotProdv, mdp = sess.run([logits2, deltaPhi, gradMag, dotProd, meanDotProd])
             # print("ClipVal", l1)
+            print("Phi", logits2d)
             print("GradPhi", l2)
             print("GradMag", gradTermv)
             print("DotProduct", dotProdv)
