@@ -57,7 +57,8 @@ F /= tf.expand_dims(tf.reduce_max(X, axis=1), dim=-1)
 # F = tf.layers.batch_normalization(F, training=True)
 
 
-LAMBDA = 0.01
+alpha = 0.01 #Scaling factor for unit field gradient
+beta  = 0.1  #Scaling factor for auto-encoder loss
 # #Phi
 logits = tf.sigmoid(tf.matmul(X, W1) + B1)
 logits2 = tf.sigmoid(tf.matmul(logits, W2) + B2)
@@ -75,12 +76,19 @@ gradMag = tf.norm(deltaPhi, axis=1)
 #[dotProd, gradTerm] = ([dotProd, gradTerm])
 
 meanDotProd = tf.reduce_mean(tf.abs(dotProd))
-cost = tf.reduce_mean(tf.abs(dotProd) + LAMBDA * gradTerm)
+cost = tf.reduce_mean(tf.abs(dotProd) + alpha * gradTerm)
 
 
 # Setup gradients
 # cost = tf.Print(cost, [X, gradTerm])
 opt = tf.train.AdamOptimizer().minimize(cost)
+
+# Setup summarys 
+tf.summary.scalar('cost', cost)
+tf.summary.scalar('cosineDistance', tf.reduce_mean(dotProd))
+tf.summary.scalar('gradientMagnitude', gradTerm)
+
+tf.summary.histogram('phi', logits2)
 
 #####################
 train_epoch = 5000000
