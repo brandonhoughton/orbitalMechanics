@@ -4,7 +4,7 @@ import time
 from dataLoader import get_russ_data, scaleOrbit
 
 
-traj, f = get_russ_data()
+traj, f = get_russ_data(planet = 3)
 
 ######################
 # Network Parameters #

@@ -48,7 +48,6 @@ def init_weights(shape):
 def forwardprop(X, w_1, w_2, w_3):
     """
     Forward-propagation.
-    IMPORTANT: yhat is not softmax since TensorFlow's softmax_cross_entropy_with_logits() does that internally.
     """
     h    = tf.nn.leaky_relu(tf.matmul(X, w_1))  # The \sigma function
     h2    = tf.nn.leaky_relu(tf.matmul(h, w_2))  # The \sigma function
