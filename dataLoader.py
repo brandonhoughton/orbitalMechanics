@@ -47,7 +47,7 @@ def scaleOrbit(vector, method='min-max'):
         raise(Exception("Not implemented"))
 
 
-def getBenchmark(test_X, test_Y, method):
+def getBenchmark_old(test_X, test_Y, method):
     if method == 'momentum':
         constant_momentum = 2 * test_X  - np.roll(test_X, 1,axis=0)
         baseline_accuracy  = np.mean((test_Y[1:] - constant_momentum[1:,1:])**2, axis = 0)
@@ -55,9 +55,17 @@ def getBenchmark(test_X, test_Y, method):
     else:
         raise(Exception("Not implemented"))
 
+def getBenchmark(test_X, test_Y, method):
+    if method == 'momentum_mse':
+        constant_momentum = 2 * test_X  - np.roll(test_X, 1,axis=0)
+        baseline_accuracy  = np.mean((test_Y[1:] - constant_momentum[1:])**2, axis = 0)
+        return (baseline_accuracy, constant_momentum)
+    else:
+        raise(Exception("Not implemented"))
 
 
-def get_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum', shuffle= True):
+
+def get_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= True):
     """ Read the specified orbit and shape it for regression"""   
 
     X = []
@@ -66,20 +74,27 @@ def get_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum', shuf
     # Load the data to predict the next location and velocity
     with np.load(J(dataDir,datasets[planet])) as data:
         scale, offset, orbit = scaleOrbit(data['traj'], method=scaleMethod)
+
         print ('Scale {}, Offset {}, Data{}'.format(scale, offset, orbit.shape))
         print (orbit)
 
+        force = (scale * data['F'].T).T
+
         traj = np.reshape(np.reshape(orbit, (-1,1), order='F'),(-1,4))
+        force = np.reshape(np.reshape(force, (-1,1), order='F'),(-1,4))
 
         X = np.roll(traj, shift = 1, axis = 0)[1:]
-        X = np.insert(X, 0, 1, axis=1)
+        # X = np.insert(X, 0, 1, axis=1)
+        F = np.roll(force, shift = 1, axis = 0)[1:]
         Y = traj[1:]
+        
 
-    (train_X, test_X, train_Y, test_Y) = train_test_split(X, Y, test_size=0.33, random_state=RANDOM_SEED, shuffle=shuffle)
+    (train_X, test_X, train_F, test_F, train_Y, test_Y) = train_test_split(X, F, Y, test_size=0.33, random_state=RANDOM_SEED, shuffle=shuffle)
 
     benchmarkResult = getBenchmark(X, Y, method=benchmarkMethod)
 
-    return scale, offset, (train_X, test_X, train_Y, test_Y), benchmarkResult
+    planetName = datasets[planet].split('.')[0]
+    return scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmarkResult, planetName
 
 
 def get_russ_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum', shuffle= True):
@@ -105,7 +120,7 @@ def get_russ_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum',
         # X = np.insert(X, 0, 1, axis=1)
         # Y = traj[1:]
 
-    return traj, f
+    return traj, f, datasets[planet]
 
 
 def get_raw_data(planet = 0, predictionHoizon = 1):

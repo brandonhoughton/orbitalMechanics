@@ -4,7 +4,7 @@ import time
 from dataLoader import get_russ_data, scaleOrbit
 
 
-traj, f = get_russ_data(planet = 3)
+traj, f, planet = get_russ_data(planet = 4)
 
 ######################
 # Network Parameters #
@@ -86,26 +86,34 @@ opt = tf.train.AdamOptimizer().minimize(cost)
 # Setup summarys 
 tf.summary.scalar('cost', cost)
 tf.summary.scalar('cosineDistance', tf.reduce_mean(dotProd))
-tf.summary.scalar('gradientMagnitude', gradTerm)
+tf.summary.scalar('gradMag', tf.reduce_mean(gradMag))
+tf.summary.scalar('dotProd', meanDotProd)
 
 tf.summary.histogram('phi', logits2)
+tf.summary.histogram('dotProducts', dotProd)
+tf.summary.histogram('gradeints', gradTerm)
+
+merged = tf.summary.merge_all()
+train_writer = tf.summary.FileWriter('./train/' + planet)
+
 
 #####################
-train_epoch = 5000000
-display_step = 1000
+train_epoch = 100000
+display_step = 1000000
+summary_step = 100
 #####################
 c = 0
 # avg_cost = 0
 # Training step
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
-    print("Grads for first step: ")
-    gradTermv, dotProdv = sess.run([ deltaPhi, dotProd])
-    print(gradTermv.shape, gradTermv)
-    print(dotProdv.shape, dotProdv)
+    # print("Grads for first step: ")
+    # gradTermv, dotProdv = sess.run([ deltaPhi, dotProd])
+    # print(gradTermv.shape, gradTermv)
+    # print(dotProdv.shape, dotProdv)
 
     #print(sess.run([grad_W1, grad_B1, grad_W2, grad_B2, prnt]))
-    print("... Grads for first step")
+    # print("... Grads for first step")
 
     # Training cycle
     for epoch in range(train_epoch):
@@ -140,6 +148,10 @@ with tf.Session() as sess:
 
             print("F1:\n", f1)
             print("E:\n",E)
+
+        if (epoch+1) % summary_step == 0:
+            summary = sess.run([merged])[0]
+            train_writer.add_summary(summary, epoch)
 
         c, _ = sess.run([cost, opt])
         
