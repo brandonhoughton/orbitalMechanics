@@ -6,9 +6,9 @@ import datetime
 
 from dataLoader import get_data
 
-def variable_summaries(var):
+def variable_summaries(var, groupName):
   """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-  with tf.name_scope('summaries'):
+  with tf.name_scope(groupName):
     mean = tf.reduce_mean(var)
     tf.summary.scalar('mean', mean)
     with tf.name_scope('stddev'):
@@ -29,41 +29,22 @@ def trippleLayer(X, outDim = 16):
     head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, use_bias=True)
     return head
 
-def setupLoss(baseNetwork, X, F, Y):
-
-    # Network output
-    Phi = tf.layers.dense(baseNetwork, 1, activation=tf.nn.sigmoid, use_bias=True)
-    Auto = tf.layers.dense(baseNetwork, 4, activation=tf.nn.sigmoid, use_bias=True)
-    
-    deltaPhi = tf.gradients(Phi, [X])[0]
-
-    # Cosine distance between F and X
-    dotProd = tf.reduce_sum(tf.multiply(F, deltaPhi)/tf.expand_dims(tf.norm(F, axis=1)*tf.norm(deltaPhi, axis=1), dim=1), axis=1)
-
-    # Mean Squared 
-    gradTerm = tf.reduce_mean(tf.norm(deltaPhi, axis=1) - 1)
-
-    gradMag = tf.norm(deltaPhi, axis=1)
-
-    loss = tf.abs(dotProd)
-
-    return loss, [Phi, deltaPhi, dotProd, gradTerm, autoTerm]
-
 
 #####################
 train_epoch = 100000
-display_step = 1000000
-summary_step = 100
+display_step = 1000
+summary_step = 1000
+pre_train_steps = 1000
 #####################
     
 def main():
 
     # Load data
-    scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmark, planet = get_data()
+    scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmark, planet = get_data(planet=3)
 
     # Load data onto GPU memory - ensure network layers have GPU support
-    with tf.device('/gpu:0'):
-
+    #with tf.device('/gpu:0'):
+    if True:
         # Define GPU constants
         X = tf.identity(tf.constant(train_X, dtype= tf.float32))
         F = tf.identity(tf.constant(train_F, dtype= tf.float32))
@@ -71,59 +52,71 @@ def main():
 
         ## Define network
         with tf.name_scope('Base_Network'):
-            baseNetwork = singleLayer(X)
+            baseNetwork = trippleLayer(X)
 
         with tf.name_scope('Phi'):
             Phi = singleLayer(baseNetwork, outDim = 1)
-            variable_summaries(Phi)
-
+            
         with tf.name_scope('Prediction'):
             Pred = singleLayer(baseNetwork, outDim = 4)
-            variable_summaries(Pred)
 
         ## Define Loss
         with tf.name_scope('gradPhi'):
             gradPhi = tf.gradients(Phi, [X])[0]
-            variable_summaries(gradPhi)
-
+            
         # Calculate dot product 
         with tf.name_scope('dotProd'):
-            dotProd = tf.reduce_sum(tf.multiply(F, gradPhi)/tf.expand_dims(tf.norm(F, axis=1)*tf.norm(gradPhi, axis=1), dim=1), axis=1)
-            variable_summaries(dotProd)
+            dotProd = tf.reduce_sum(tf.multiply(F, gradPhi)/tf.expand_dims(tf.norm(F, axis=1)*tf.norm(gradPhi, axis=1), dim=1), axis=1)            
 
         # Calculate gradient regualization term
         with tf.name_scope('gradMag'):
-            gradMag = tf.norm(gradPhi, axis=1)
-            variable_summaries(gradMag)
+            gradMag = tf.norm(gradPhi, axis=1)   
+
+        with tf.name_scope('grad_loss'):
+            gradLoss = tf.reduce_mean(tf.square(gradMag - 1))       
 
         with tf.name_scope('pred_loss'):
             predLoss = tf.losses.huber_loss(Y,Pred)
-            variable_summaries(predLoss)
-
+            
         with tf.name_scope('loss'):
             alpha = tf.constant(0.01, dtype=tf.float32) # Scaling factor for magnitude of gradient
-            beta  = tf.constant(0.1, dtype=tf.float32)  # Scaling factor for prediction of next time step 
-            loss = tf.reduce_mean(tf.abs(dotProd) + alpha * gradMag + beta * predLoss)
-            variable_summaries(loss)
-
+            beta  = tf.constant(0, dtype=tf.float32)  # Scaling factor for prediction of next time step 
+            loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + beta * predLoss
+            
         with tf.name_scope('train'):
             train_step = tf.train.AdamOptimizer().minimize(loss)
 
+    # Create summary statistics outside of GPU scope
+    variable_summaries(Phi, "Phi")
+    variable_summaries(Pred, "Prediction")
+    variable_summaries(gradPhi, "GradPhi")
+    variable_summaries(dotProd, "DotProduct")
+    variable_summaries(gradMag, "GradMagnitude")
+    tf.summary.scalar("GradLoss", gradLoss)
+    tf.summary.scalar("PredictiveLoss", predLoss)
+    tf.summary.scalar("Cost", loss)
 
-        ## Collect summary stats
-        merged = tf.summary.merge_all()
+    # Collect summary stats
+    merged = tf.summary.merge_all()
+
+    # Train the model
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        
         timeStr = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M')
-        train_writer = tf.summary.FileWriter('./train/' + planet + '/' + timeStr)
+        train_writer = tf.summary.FileWriter('./train/' + planet + '/' + timeStr, sess.graph)
 
-        with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
-
-            for epoch in range(train_epoch):
-                if (epoch+1) % summary_step == 0:
+        for epoch in range(train_epoch):
+            if epoch > pre_train_steps:
+                if epoch % summary_step == 0:
                     summary = sess.run([merged])[0]
                     train_writer.add_summary(summary, epoch)
 
-                l, _ = sess.run([loss, train_step])
+                if epoch % display_step == 0:
+                    loss_ = sess.run(loss)
+                    print(loss_)
+
+            sess.run([train_step])
 
 
 main()
