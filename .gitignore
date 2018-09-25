@@ -4,3 +4,8 @@ trajectories.zip
 
 *.json
 *.pyc
+
+.vscode
+train/
+test/
+__pycache__
