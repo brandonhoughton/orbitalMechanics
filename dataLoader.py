@@ -35,10 +35,17 @@ def scaleOrbit(vector, method='min-max'):
         return scale, offset, np.multiply(vector, scale)
     elif (method == 'min-max'):
         # Shift position components
-        offset = np.mean(vector,axis=1)
-        scale = 1 / np.max(np.abs(vector), axis=1)
-        vector = (vector.transpose() - offset).transpose()
-        vector = (vector.transpose() * scale).transpose()
+        offset = np.mean(vector,axis=0)
+        scale = 1 / np.max(np.abs(vector - offset), axis=0)
+        s1 = (scale[0] + scale[1]) / 2
+        scale[0:2] = s1
+        s2 = (scale[2] + scale[3]) / 2
+        scale[2:] = s2
+        
+        # Don't offset velocity
+        offset[2:] = 0
+        vector = vector - offset
+        vector = vector * scale
 
         return scale, offset, vector
     elif (method == 'none'):
@@ -63,38 +70,75 @@ def getBenchmark(test_X, test_Y, method):
     else:
         raise(Exception("Not implemented"))
 
+def get_energy():
+    for planet in datasets:
+        with np.load(J(dataDir, planet)) as data:
+            print(planet,data['energy_total'][213])
 
 
-def get_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= True):
+def get_data(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= True):
     """ Read the specified orbit and shape it for regression"""   
 
-    X = []
-    Y = []
+    samples = []
+    X_list = []
+    F_list = []
+    Y_list = []
 
     # Load the data to predict the next location and velocity
-    with np.load(J(dataDir,datasets[planet])) as data:
-        scale, offset, orbit = scaleOrbit(data['traj'], method=scaleMethod)
+    for planet in datasets:
+        with np.load(J(dataDir, planet)) as data:
+            traj = np.array(data['traj'], dtype=np.float32)
+            force = np.array(data['F'])
 
-        print ('Scale {}, Offset {}, Data{}'.format(scale, offset, orbit.shape))
-        print (orbit)
 
-        force = (scale * data['F'].T).T
+            traj = np.reshape(np.reshape(traj, (-1,1), order='F'),(-1,4))
+            force = np.reshape(np.reshape(force, (-1,1), order='F'),(-1,4))
 
-        traj = np.reshape(np.reshape(orbit, (-1,1), order='F'),(-1,4))
-        force = np.reshape(np.reshape(force, (-1,1), order='F'),(-1,4))
-
-        X = np.roll(traj, shift = 1, axis = 0)[1:]
-        # X = np.insert(X, 0, 1, axis=1)
-        F = np.roll(force, shift = 1, axis = 0)[1:]
-        Y = traj[1:]
+            X = np.roll(traj, shift = 1, axis = 0)[1:]
+            F = np.roll(force, shift = 1, axis = 0)[1:]
+            Y = traj[1:]
         
 
-    (train_X, test_X, train_F, test_F, train_Y, test_Y) = train_test_split(X, F, Y, test_size=0.33, random_state=RANDOM_SEED, shuffle=shuffle)
+        X_list.append(X)
+        F_list.append(F)
+        Y_list.append(Y)
+
+        samples.append(X.shape[0])
+
+
+    # Sample uniformly from each planet
+    minSamples = min(samples)
+
+    X_all = np.empty((0,4), dtype=np.float32)
+    F_all = np.empty((0,4), dtype=np.float32)
+    Y_all = np.empty((0,4), dtype=np.float32)
+    for n, x, f, y in zip(samples, X_list, F_list, Y_list):
+        #Select a random uniform subset of samples for each planet
+        if n > minSamples:
+            ids = np.random.choice(range(n), minSamples, replace=False)
+            x = x[ids]
+            f = f[ids]
+            y = y[ids]
+        
+        print(x.shape)
+        X_all = np.append(X_all, x, axis=0)
+        F_all = np.append(F_all, f, axis=0)
+        Y_all = np.append(Y_all, y, axis=0)
+
+
+    # Scale Data
+    scale, offset, X_all = scaleOrbit(X_all, method=scaleMethod)
+
+    print ('Scale {}, Offset {}, Data{}'.format(scale, offset, X_all.shape))
+    print (X_all)
+
+    F_all = scale * F_all
+
+    (train_X, test_X, train_F, test_F, train_Y, test_Y) = train_test_split(X_all, F_all, Y_all, test_size=0, random_state=RANDOM_SEED, shuffle=shuffle)
 
     benchmarkResult = getBenchmark(X, Y, method=benchmarkMethod)
 
-    planetName = datasets[planet].split('.')[0]
-    return scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmarkResult, planetName
+    return scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmarkResult
 
 
 def get_russ_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum', shuffle= True):
@@ -143,4 +187,4 @@ def get_raw_data(planet = 0, predictionHoizon = 1):
         return X, Y
         
 
-get_raw_data(0)
+get_energy()
