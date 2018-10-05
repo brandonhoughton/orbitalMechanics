@@ -3,6 +3,7 @@ import random
 import tensorflow as tf
 import numpy as np
 import datetime
+from functools import reduce
 
 from dataLoader import get_data
 
@@ -18,6 +19,21 @@ def variable_summaries(var, groupName):
     tf.summary.scalar('min', tf.reduce_min(var))
     tf.summary.histogram('histogram', var)
 
+    
+def variable_summaries_list(var, groupName):
+  """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+  with tf.name_scope(groupName):
+    summaries = []
+    mean = tf.reduce_mean(var)
+    summaries.append(tf.summary.scalar('mean', mean))
+    with tf.name_scope('stddev'):
+      stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+    summaries.append(tf.summary.scalar('stddev', stddev))
+    #summaries.append(tf.summary.scalar('max', tf.reduce_max(var)))
+    #summaries.append(tf.summary.scalar('min', tf.reduce_min(var)))
+    summaries.append(tf.summary.histogram('histogram', var))
+    return summaries
+
 def singleLayer(X, outDim = 50):
     #Hidden layers
     head = tf.layers.dense(X, outDim, activation=tf.nn.sigmoid, use_bias=True)
@@ -30,17 +46,18 @@ def trippleLayer(X, outDim = 16):
     return head
 
 
-#####################
-train_epoch = 500000
-display_step =  1000
-summary_step =  2000
-pre_train_steps = 1000
-#####################
+#######################
+train_epoch =    500000
+display_step =     1000
+summary_step =     2000
+checkpoint_int = 100000
+pre_train_steps  = 1000
+#######################
 a = 0.01 # GradNorm Weight
-b = 0.01 # Prediction Weight
+b = 0.00 # Prediction Weight
 g = 0.01 # Scale for Phi
-lr = 0.01
-#####################
+lr = 0.01 # Learning Rate
+#######################
     
 def main():
 
@@ -53,7 +70,8 @@ def main():
         # Define GPU constants
         X = tf.identity(tf.constant(train_X, dtype= tf.float32))
         F = tf.identity(tf.constant(train_F, dtype= tf.float32))
-        # Y = tf.identity(tf.constant(train_Y, dtype= tf.float32))
+        if (b > 0):
+            Y = tf.identity(tf.constant(train_Y, dtype= tf.float32))
 
         ## Define network
         with tf.name_scope('Base_Network'):
@@ -62,9 +80,10 @@ def main():
 
         with tf.name_scope('Phi'):
             Phi = singleLayer(baseNetwork, outDim = 1)
-            
-        # with tf.name_scope('Prediction'):
-        #     Pred = singleLayer(baseNetwork, outDim = 4)
+
+        if(b > 0):    
+            with tf.name_scope('Prediction'):
+                Pred = singleLayer(baseNetwork, outDim = 4)
 
         ## Define Loss
         with tf.name_scope('gradPhi'):
@@ -79,10 +98,12 @@ def main():
             gradMag = tf.norm(gradPhi, axis=1)   
 
         with tf.name_scope('grad_loss'):
-            gradLoss = tf.reduce_mean(tf.square(gradMag - 1))       
+            #gradLoss = tf.reduce_mean(tf.square(gradMag - 1))       
+            gradLoss = tf.reduce_mean(tf.maximum(gradMag - 2, 0) + tf.maximum(1 - gradMag, 0))
 
-        # with tf.name_scope('pred_loss'):
-        #     predLoss = tf.losses.huber_loss(Y,Pred)
+        if (b > 0):
+            with tf.name_scope('pred_loss'):
+                predLoss = tf.losses.huber_loss(Y,Pred)
 
         with tf.name_scope('phi_mean'):
             mean = tf.reduce_mean(Phi)
@@ -93,7 +114,14 @@ def main():
             alpha = tf.constant(a, dtype=tf.float32) # Scaling factor for magnitude of gradient
             beta  = tf.constant(b, dtype=tf.float32)  # Scaling factor for prediction of next time step 
             gamma  = tf.constant(g, dtype=tf.float32)  # Scaling factor for phi scale invarientp 
-            loss = tf.reduce_mean(tf.abs(dotProd / gradMag) + tf.maximum(gradMag - 2, 0) + tf.abs(tf.minimum(gradMag - 1, 0))) + gamma * phiLoss
+            loss = tf.reduce_mean(tf.abs(dotProd))
+
+            if (a > 0):
+                loss += alpha * gradLoss
+            if (b > 0):
+                loss += beta * predLoss
+            if (g > 0):
+                loss += gamma * phiLoss
             #loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + gamma * phiLoss
             #loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + beta * predLoss + gamma * phiLoss
             
@@ -101,26 +129,16 @@ def main():
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 
         with tf.name_scope('summaries'):
-            Phi_0 = tf.slice(Phi, [0,0], [4223,1]) / mean
-            Phi_1 = tf.slice(Phi, [4223 * 1 - 1, 0], [4223, 1]) / mean
-            Phi_2 = tf.slice(Phi, [4223 * 2 - 1, 0], [4223, 1]) / mean
-            Phi_3 = tf.slice(Phi, [4223 * 3 - 1, 0], [4223, 1]) / mean 
-            Phi_4 = tf.slice(Phi, [4223 * 4 - 1, 0], [4223, 1]) / mean
-            Phi_5 = tf.slice(Phi, [4223 * 5 - 1, 0], [4223, 1]) / mean
-            Phi_6 = tf.slice(Phi, [4223 * 6 - 1, 0], [4223, 1]) / mean
-            Phi_7 = tf.slice(Phi, [4223 * 7 - 1, 0], [4223, 1]) / mean
+            planet_values = [tf.slice(Phi, [4223 * i, 0], [4223, 1]) for i in range(8)]
+            means = [tf.reduce_mean(planetPhi) for planetPhi in planet_values]
+            stratified_var = reduce(lambda x,y: (x + y) / 2, [tf.sqrt(tf.reduce_mean(tf.square(var - mean))) for (var, mean) in zip(planet_values, means)])
+
             
 
     # Create summary statistics outside of GPU scope
     variable_summaries(Phi, "PhiSummary")
-    variable_summaries(Phi_0, "Phi_earth")
-    variable_summaries(Phi_1, "Phi_jupiter")
-    variable_summaries(Phi_2, "Phi_mars")
-    variable_summaries(Phi_3, "Phi_mercury")
-    variable_summaries(Phi_4, "Phi_neptune")
-    variable_summaries(Phi_5, "Phi_saturn")
-    variable_summaries(Phi_6, "Phi_uranus")
-    variable_summaries(Phi_7, "Phi_venus")
+    tf.summary.scalar("PhiByPlanetVar", stratified_var,)
+
     #variable_summaries(Pred, "Prediction")
     variable_summaries(gradPhi, "GradPhi")
     variable_summaries(dotProd, "DotProduct")
@@ -130,25 +148,41 @@ def main():
     tf.summary.scalar("PhiLoss", phiLoss)
     tf.summary.scalar("Cost", loss)
 
-    # Collect summary stats
+    # Collect summary stats for train variables
     merged = tf.summary.merge_all()
+
+    #Create list of merged summaries to visualize together on a single graph
+    summary_lables = ['earth', 'jupiter', 'mars', 'mercury', 'neptune', 'saturn', 'uranus', 'venus'] 
+    summary_lables = ['./train/' + planet for planet in summary_lables]
+    with tf.name_scope('planets'):
+        summary_list = [tf.summary.merge(variable_summaries_list(planet_val, summary_label)) for (planet_val, summary_label) in zip(planet_values, summary_lables)]
+
+
+    # Create checkpoint saver
+    saver = tf.train.Saver()
 
     # Train the model
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
         
-        timeStr = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M')
-        train_writer = tf.summary.FileWriter('./train/alpha-' + str(a) + 'beta-' + str(b) + '/' + timeStr, sess.graph)
+        #timeStr = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M')
+        train_writer = tf.summary.FileWriter('./train/alpha-' + str(a) + 'beta-' + str(b) + 'gama-' + str(g), sess.graph)
+        writers = [tf.summary.FileWriter(name) for name in summary_lables]
 
         for epoch in range(train_epoch):
             if epoch > pre_train_steps:
                 if epoch % summary_step == 0:
                     summary = sess.run([merged])[0]
                     train_writer.add_summary(summary, epoch)
+                    [writer.add_summary(sess.run([summary])[0], epoch) for (writer,summary) in zip(writers,summary_list)]
 
                 if epoch % display_step == 0:
                     loss_ = sess.run(loss)
-                    print(loss_)
+                    print(loss_, epoch)
+
+                if epoch % checkpoint_int == 0:
+                    saver.save(sess,save_path='./network/'+ str(epoch))
+                    
 
             sess.run([train_step])
 
