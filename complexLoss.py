@@ -1,4 +1,5 @@
 import os
+import math
 import random
 import tensorflow as tf
 import numpy as np
@@ -52,6 +53,7 @@ display_step =     1000
 summary_step =     2000
 checkpoint_int = 100000
 pre_train_steps  = 1000
+viz_step         = 5000
 #######################
 a = 0.01 # GradNorm Weight
 b = 0.00 # Prediction Weight
@@ -67,16 +69,21 @@ def main():
     # Load data onto GPU memory - ensure network layers have GPU support
     #with tf.device('/gpu:0'):
     if True:
-        # Define GPU constants
-        X = tf.identity(tf.constant(train_X, dtype= tf.float32))
-        F = tf.identity(tf.constant(train_F, dtype= tf.float32))
+        # # Define GPU constants
+        # X = tf.identity(tf.constant(train_X, dtype= tf.float32))
+        # F = tf.identity(tf.constant(train_F, dtype= tf.float32))
+        # if (b > 0):
+        #     Y = tf.identity(tf.constant(train_Y, dtype= tf.float32))
+
+        # Define placeholders
+        X = tf.placeholder(dtype= tf.float32, shape=[None, 4])
+        F = tf.placeholder(dtype= tf.float32, shape=[None, 4])
         if (b > 0):
-            Y = tf.identity(tf.constant(train_Y, dtype= tf.float32))
+            Y = tf.placeholder(dtype= tf.float32, shape=[None, 4])
 
         ## Define network
         with tf.name_scope('Base_Network'):
             baseNetwork = singleLayer(X, outDim=32)
-
 
         with tf.name_scope('Phi'):
             Phi = singleLayer(baseNetwork, outDim = 1)
@@ -122,8 +129,6 @@ def main():
                 loss += beta * predLoss
             if (g > 0):
                 loss += gamma * phiLoss
-            #loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + gamma * phiLoss
-            #loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + beta * predLoss + gamma * phiLoss
             
         with tf.name_scope('train'):
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
@@ -161,6 +166,19 @@ def main():
     # Create checkpoint saver
     saver = tf.train.Saver()
 
+    # Visualization mesh:
+    nx, ny = (100, 100)
+
+    x = np.linspace(-1, 1, nx)
+    y = np.linspace(-1, 1, ny)
+    X, Y = np.meshgrid(x, y)
+    X = np.reshape(X, (-1))
+    Y = np.reshape(Y, (-1))
+    T = np.arctan2(Y, X) + (math.pi / 2.0)
+    R = 1.5 + np.sqrt((Y) ** 2 + (X) ** 2)
+    U, V = R * np.cos(T), R * np.sin(T)
+    viz_dic = {'X':np.array([X, Y, U, V])}
+
     # Train the model
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -168,23 +186,30 @@ def main():
         #timeStr = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M')
         train_writer = tf.summary.FileWriter('./train/alpha-' + str(a) + 'beta-' + str(b) + 'gama-' + str(g), sess.graph)
         writers = [tf.summary.FileWriter(name) for name in summary_lables]
+        dic = {'X':train_X, 'F':train_F}
 
         for epoch in range(train_epoch):
+            
             if epoch > pre_train_steps:
                 if epoch % summary_step == 0:
-                    summary = sess.run([merged])[0]
+                    summary = sess.run([merged],feed_dict=dic)[0]
                     train_writer.add_summary(summary, epoch)
-                    [writer.add_summary(sess.run([summary])[0], epoch) for (writer,summary) in zip(writers,summary_list)]
+                    [writer.add_summary(sess.run([summary],feed_dict=dic)[0], epoch) for (writer,summary) in zip(writers,summary_list)]
 
                 if epoch % display_step == 0:
-                    loss_ = sess.run(loss)
+                    loss_ = sess.run(loss,feed_dict=dic)
                     print(loss_, epoch)
 
                 if epoch % checkpoint_int == 0:
                     saver.save(sess,save_path='./network/'+ str(epoch))
+
+                if epoch % viz_step == 0:
+                    phi = sess.run([Phi],feed_dict=viz_dic)
+                    np.save('./np/'+str(epoch), phi)
                     
 
-            sess.run([train_step])
+            sess.run([train_step],feed_dict=dic)
+
 
 
 main()
