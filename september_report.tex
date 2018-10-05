@@ -1,0 +1,40 @@
+\documentclass[10pt,letterpaper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\author{Brandon Houghton}
+\begin{document}
+
+In September I developed a framework for auto-differentiation of arbitrary neural networks. This framework enables us to minimize losses of the form $\min{g(\bigtriangledown f(x))} $. Using this framework we ran a series of experiments aimed at capturing a physically based solution to $ \min_{\phi} \sum^{T}_{t = 1} \Vert \dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right) \Vert^2_2 $.
+Early results produced trivial solutions e.g. $\bigtriangledown \phi(\pmb{r}) = 0 \implies \phi(\pmb{r}_t) = c$. A gradient normalization term was added to reduce the likelihood of these results, and for numeric stability the cosine distance between $\dot{\pmb{r}_t}$ and $\bigtriangledown \phi (\pmb{r}_t)$ replaced the dot product of the two terms:
+$$ 
+\min_{\phi} \sum^{T}_{t = 1} 
+\left( \left\vert
+\frac{\dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right)}{{\Vert f_t \Vert}^2_2 * {\Vert \bigtriangledown \phi (\pmb{r}_t) \Vert}^2_2}
+\right \vert
++ \left( 1-\left\Vert \bigtriangledown \phi \left( \pmb{r}_t \right) \right\Vert^2_2 \right)^2 \right)
+$$
+
+This objective was trained by drawing $4000$ samples uniformly from trajectories of each planet resulting in a mini-batch of $n = 32000$ samples. Multiple fully connected base networks were trained with 1-3 layers and 4-256 hidden units per layer. Results were sable, with a small single layer network easily minimizing the objective. 
+When evaluating $\phi(\pmb{r})$ however, the value would drift by a scalar factor resulting in saturation or vanishing $\phi(\pmb{r})$ thus the scale of $\phi(\pmb{r})$ was fixed by adding a second normalization term, $( 0.5 - \frac{1}{n}\sum\phi(\pmb{r}))^2$.
+
+This gave a strong distinction between the value of $\phi$ for each of the planets at the beginning of training, however the constant value of $\phi(\pmb{r})$ along each planet's trajectories converged to the fixed scale, $0.5$, during training. In addition the gradient normalization term, $( 1-\left\Vert \bigtriangledown \phi \left( \pmb{r}_t \right) \right\Vert^2_2 )^2$ accounted for a large portion of the final loss leading to a relaxation of this constraint to a modified hinge loss with zero cost for $ 1 \leq \Vert \bigtriangledown \phi \left( \pmb{r}_t \right) \Vert \leq 2$
+
+$$ 
+\min_{\phi} \sum^{N}_{n = 1} 
+\left( 
+	\left\vert
+	\frac{\dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_n \right)}{{\Vert f_n \Vert}^2_2 * {\Vert \bigtriangledown \phi (\pmb{r}_n) \Vert}^2_2}
+	\right \vert
++ \max{\left(\left\Vert \bigtriangledown \phi \left( \pmb{r}_n \right) \right\Vert^2_2 - 2, 0\right)}
++ \max{\left(1 - \left\Vert \bigtriangledown \phi \left( \pmb{r}_n \right) \right\Vert^2_2, 0\right)}
+\right)
+$$
+
+This objective, while still minimizing the dot-product, $\dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_n \right)$ resulted in stable $ \phi(\pmb{r})$ unique to each planet's trajectory that remained separable during training. With large networks (three fully connected layers with 50+ units) these planetary constants would still converge, however for single layer networks (50, 12, 4 hidden units tested) $\phi()$ would remain reasonably stable conditioned on each planet and the variance of a mini-batch was not decreasing as it did with larger networks.
+
+Despite this, the constants learned show no obvious relation to the energy function of the orbits they encode. Some issues that I will address in the coming weeks are the dis-continuity between sampled points in trajectories, exploring a smoothness function over $\phi(\pmb{r}))$ and evaluating $\phi(\pmb{r})) $ over the entire domain throughout training.
+
+
+\end{document}
