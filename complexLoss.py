@@ -59,6 +59,7 @@ def main():
         with tf.name_scope('Base_Network'):
             baseNetwork = singleLayer(X, outDim=32)
 
+
         with tf.name_scope('Phi'):
             Phi = singleLayer(baseNetwork, outDim = 1)
             
