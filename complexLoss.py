@@ -57,7 +57,7 @@ def main():
 
         ## Define network
         with tf.name_scope('Base_Network'):
-            baseNetwork = trippleLayer(X)
+            baseNetwork = singleLayer(X, outDim=32)
 
         with tf.name_scope('Phi'):
             Phi = singleLayer(baseNetwork, outDim = 1)
@@ -85,13 +85,14 @@ def main():
 
         with tf.name_scope('phi_mean'):
             mean = tf.reduce_mean(Phi)
-            phiLoss = tf.square(mean - 0.5) + tf.square(tf.sqrt(tf.reduce_mean(tf.square(Phi - mean))) - 0.08)
+            #phiLoss = tf.square(mean - 0.5) + tf.square(tf.sqrt(tf.reduce_mean(tf.square(Phi - mean))) - 0.08)
+            phiLoss = tf.square(mean - 0.5)
             
         with tf.name_scope('loss'):
             alpha = tf.constant(a, dtype=tf.float32) # Scaling factor for magnitude of gradient
             beta  = tf.constant(b, dtype=tf.float32)  # Scaling factor for prediction of next time step 
             gamma  = tf.constant(g, dtype=tf.float32)  # Scaling factor for phi scale invarientp 
-            loss = tf.reduce_mean(tf.abs(dotProd / gradMag) + tf.maximum(gradMag - 2, 0) + tf.abs(tf.minimum(gradMag - 1, 0)))
+            loss = tf.reduce_mean(tf.abs(dotProd / gradMag) + tf.maximum(gradMag - 2, 0) + tf.abs(tf.minimum(gradMag - 1, 0))) + gamma * phiLoss
             #loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + gamma * phiLoss
             #loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + beta * predLoss + gamma * phiLoss
             
@@ -99,14 +100,14 @@ def main():
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 
         with tf.name_scope('summaries'):
-            Phi_0 = tf.slice(Phi, [0,0], [4223,1])
-            Phi_1 = tf.slice(Phi, [4223 * 1 - 1, 0], [4223, 1])
-            Phi_2 = tf.slice(Phi, [4223 * 2 - 1, 0], [4223, 1])
-            Phi_3 = tf.slice(Phi, [4223 * 3 - 1, 0], [4223, 1])
-            Phi_4 = tf.slice(Phi, [4223 * 4 - 1, 0], [4223, 1])
-            Phi_5 = tf.slice(Phi, [4223 * 5 - 1, 0], [4223, 1])
-            Phi_6 = tf.slice(Phi, [4223 * 6 - 1, 0], [4223, 1])
-            Phi_7 = tf.slice(Phi, [4223 * 7 - 1, 0], [4223, 1])
+            Phi_0 = tf.slice(Phi, [0,0], [4223,1]) / mean
+            Phi_1 = tf.slice(Phi, [4223 * 1 - 1, 0], [4223, 1]) / mean
+            Phi_2 = tf.slice(Phi, [4223 * 2 - 1, 0], [4223, 1]) / mean
+            Phi_3 = tf.slice(Phi, [4223 * 3 - 1, 0], [4223, 1]) / mean 
+            Phi_4 = tf.slice(Phi, [4223 * 4 - 1, 0], [4223, 1]) / mean
+            Phi_5 = tf.slice(Phi, [4223 * 5 - 1, 0], [4223, 1]) / mean
+            Phi_6 = tf.slice(Phi, [4223 * 6 - 1, 0], [4223, 1]) / mean
+            Phi_7 = tf.slice(Phi, [4223 * 7 - 1, 0], [4223, 1]) / mean
             
 
     # Create summary statistics outside of GPU scope
