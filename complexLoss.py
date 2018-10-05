@@ -57,7 +57,7 @@ def main():
 
         ## Define network
         with tf.name_scope('Base_Network'):
-            baseNetwork = trippleLayer(X)
+            baseNetwork = singleLayer(X, outDim=4)
 
         with tf.name_scope('Phi'):
             Phi = singleLayer(baseNetwork, outDim = 1)
@@ -91,7 +91,7 @@ def main():
             alpha = tf.constant(a, dtype=tf.float32) # Scaling factor for magnitude of gradient
             beta  = tf.constant(b, dtype=tf.float32)  # Scaling factor for prediction of next time step 
             gamma  = tf.constant(g, dtype=tf.float32)  # Scaling factor for phi scale invarientp 
-            loss = tf.reduce_mean(tf.abs(dotProd / gradMag) + tf.maximum(gradMag - 2, 0) + tf.abs(tf.minimum(gradMag - 1, 0)))
+            loss = tf.reduce_mean(tf.abs(dotProd / gradMag) + tf.maximum(gradMag - 2, 0) + tf.abs(tf.minimum(gradMag - 1, 0))) + gamma * phiLoss
             #loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + gamma * phiLoss
             #loss = tf.reduce_mean(tf.abs(dotProd)) + alpha * gradLoss + beta * predLoss + gamma * phiLoss
             
