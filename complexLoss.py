@@ -76,10 +76,10 @@ def main():
         #     Y = tf.identity(tf.constant(train_Y, dtype= tf.float32))
 
         # Define placeholders
-        X = tf.placeholder(dtype= tf.float32, shape=[None, 4])
-        F = tf.placeholder(dtype= tf.float32, shape=[None, 4])
+        X = tf.placeholder(dtype= tf.float32, shape=[None, 4], name='X')
+        F = tf.placeholder(dtype= tf.float32, shape=[None, 4], name = 'F')
         if (b > 0):
-            Y = tf.placeholder(dtype= tf.float32, shape=[None, 4])
+            Y = tf.placeholder(dtype= tf.float32, shape=[None, 4], name='Y')
 
         ## Define network
         with tf.name_scope('Base_Network'):
@@ -158,7 +158,7 @@ def main():
 
     #Create list of merged summaries to visualize together on a single graph
     summary_lables = ['earth', 'jupiter', 'mars', 'mercury', 'neptune', 'saturn', 'uranus', 'venus'] 
-    summary_lables = ['./train/' + planet for planet in summary_lables]
+    summary_lables = ['./train/planets/' + planet for planet in summary_lables]
     with tf.name_scope('planets'):
         summary_list = [tf.summary.merge(variable_summaries_list(planet_val, summary_label)) for (planet_val, summary_label) in zip(planet_values, summary_lables)]
 
@@ -171,13 +171,13 @@ def main():
 
     x = np.linspace(-1, 1, nx)
     y = np.linspace(-1, 1, ny)
-    X, Y = np.meshgrid(x, y)
-    X = np.reshape(X, (-1))
-    Y = np.reshape(Y, (-1))
-    T = np.arctan2(Y, X) + (math.pi / 2.0)
-    R = 1.5 + np.sqrt((Y) ** 2 + (X) ** 2)
+    Xv, Yv = np.meshgrid(x, y)
+    Xv = np.reshape(Xv, (-1))
+    Yv = np.reshape(Yv, (-1))
+    T = np.arctan2(Yv, Xv) + (math.pi / 2.0)
+    R = 1.5 + np.sqrt((Yv) ** 2 + (Xv) ** 2)
     U, V = R * np.cos(T), R * np.sin(T)
-    viz_dic = {'X':np.array([X, Y, U, V])}
+    viz_dic = {'X:0':np.array([Xv, Yv, U, V]).T}
 
     # Train the model
     with tf.Session() as sess:
@@ -186,7 +186,7 @@ def main():
         #timeStr = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M')
         train_writer = tf.summary.FileWriter('./train/alpha-' + str(a) + 'beta-' + str(b) + 'gama-' + str(g), sess.graph)
         writers = [tf.summary.FileWriter(name) for name in summary_lables]
-        dic = {'X':train_X, 'F':train_F}
+        dic = {'X:0':train_X, 'F:0':train_F}
 
         for epoch in range(train_epoch):
             
@@ -205,7 +205,7 @@ def main():
 
                 if epoch % viz_step == 0:
                     phi = sess.run([Phi],feed_dict=viz_dic)
-                    np.save('./np/'+str(epoch), phi)
+                    np.save('./train/'+str(epoch), phi)
                     
 
             sess.run([train_step],feed_dict=dic)
