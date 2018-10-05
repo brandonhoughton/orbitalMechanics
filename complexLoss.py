@@ -57,7 +57,7 @@ viz_step         = 5000
 #######################
 a = 0.01 # GradNorm Weight
 b = 0.00 # Prediction Weight
-g = 0.01 # Scale for Phi
+g = 0.1 # Scale for Phi
 lr = 0.01 # Learning Rate
 #######################
     
@@ -120,7 +120,7 @@ def main():
         with tf.name_scope('loss'):
             alpha = tf.constant(a, dtype=tf.float32) # Scaling factor for magnitude of gradient
             beta  = tf.constant(b, dtype=tf.float32)  # Scaling factor for prediction of next time step 
-            gamma  = tf.constant(g, dtype=tf.float32)  # Scaling factor for phi scale invarientp 
+            gamma  = tf.constant(g, dtype=tf.float32)  # Scaling factor for phi scale invarient
             loss = tf.reduce_mean(tf.abs(dotProd))
 
             if (a > 0):
@@ -175,7 +175,7 @@ def main():
     Xv = np.reshape(Xv, (-1))
     Yv = np.reshape(Yv, (-1))
     T = np.arctan2(Yv, Xv) + (math.pi / 2.0)
-    R = 1.5 + np.sqrt((Yv) ** 2 + (Xv) ** 2)
+    R = np.sqrt((Yv) ** 2 + (Xv) ** 2)
     U, V = R * np.cos(T), R * np.sin(T)
     viz_dic = {'X:0':np.array([Xv, Yv, U, V]).T}
 
@@ -206,6 +206,9 @@ def main():
                 if epoch % viz_step == 0:
                     phi = sess.run([Phi],feed_dict=viz_dic)
                     np.save('./train/'+str(epoch), phi)
+                    phi = sess.run([Phi],feed_dict=dic)
+                    np.save('./train/p'+str(epoch),np.array([train_X[:,0], train_X[:,1], phi]))
+                    
                     
 
             sess.run([train_step],feed_dict=dic)
