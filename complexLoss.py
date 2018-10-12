@@ -201,7 +201,7 @@ def main():
                     print(loss_, epoch)
 
                 if epoch % checkpoint_int == 0:
-                    saver.save(sess,save_path='./network/'+ str(epoch))
+                    saver.save(sess,save_path='./new_network/'+ str(epoch))
 
                 if epoch % viz_step == 0:
                     phi = sess.run([Phi],feed_dict=viz_dic)

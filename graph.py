@@ -1,27 +1,29 @@
-import numpy as np
+
 import math
+import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider, Button, RadioButtons
 from mpl_toolkits.mplot3d import Axes3D
 
 from dataLoader import get_data
 
 
-scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmark = get_data(shuffle=False)
+# scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmark = get_data(shuffle=False)
 
-#Determine mean velocity for each planet
-planet_values = [train_X[4223 * i:4223 * (i+1),:] for i in range(8)]
-radius = [np.average(np.sqrt(val[:,0] ** 2 + val[:,1]**2)) for val in planet_values]
-velocity = [np.average(np.sqrt(val[:,2] ** 2 + val[:,3]**2)) for val in planet_values]
+# #Determine mean velocity for each planet
+# planet_values = [train_X[4223 * i:4223 * (i+1),:] for i in range(8)]
+# radius = [np.average(np.sqrt(val[:,0] ** 2 + val[:,1]**2)) for val in planet_values]
+# velocity = [np.average(np.sqrt(val[:,2] ** 2 + val[:,3]**2)) for val in planet_values]
 
-pairs = zip(radius, velocity)
+# pairs = zip(radius, velocity)
 
-avgs = [np.average(val, axis=0) for val in planet_values]
-foo = 1
+# avgs = [np.average(val, axis=0) for val in planet_values]
+# foo = 1
 
-# print(np.max(train_X,axis=0))
-# print(np.min(train_X,axis=0))
+# # print(np.max(train_X,axis=0))
+# # print(np.min(train_X,axis=0))
 
-# Visualization mesh:
+# # Visualization mesh:
 nx, ny = (20, 20)
 
 x = np.linspace(-1, 1, nx)
@@ -32,7 +34,7 @@ Y = np.reshape(Y, (-1))
 R = np.sqrt((Y) ** 2 + (X) ** 2)
 T = np.arctan2(Y, X) + (math.pi / 2.0)
 
-U, V = R * np.cos(T), R * np.sin(T)
+# U, V = R * np.cos(T), R * np.sin(T)
 
 # plt.axes([0.025, 0.025, 0.95, 0.95])
 # plt.quiver(X, Y, U, V, R, alpha=.5)

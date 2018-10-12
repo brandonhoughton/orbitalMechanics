@@ -96,7 +96,7 @@ def get_data(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= Tru
 
             X = np.roll(traj, shift = 1, axis = 0)[1:]
             F = np.roll(force, shift = 1, axis = 0)[1:]
-            Y = traj[1:]
+            Y = traj[:-1]
         
 
         X_list.append(X)
