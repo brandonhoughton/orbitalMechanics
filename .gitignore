@@ -4,7 +4,13 @@ trajectories.zip
 
 *.json
 *.pyc
-
+*.meta
+*.index
+events.out.*
+*.data*
+*.npy
+*.cpython*
+checkpoint
 .vscode
 train/
 test/
