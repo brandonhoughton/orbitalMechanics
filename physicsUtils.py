@@ -1,4 +1,5 @@
 import math
+import numpy as np
 from scipy.constants import G
 
 # Mass of each planet in kg as defined by IAU in 2009
@@ -48,16 +49,17 @@ def getEnergyTotal(normalize=False):
 # @returns tuple representing velocity_x, velocity_y in m/s
 def getAvgVelocity(x, y):
     muSun = 1.32712440018e20
-    radius = math.sqrt(x**2 + y**2)
-    mag = math.sqrt(muSun/radius)
-    theta = math.atan2(y, x) + (math.pi / 2.0)
+    radius = np.sqrt(x**2 + y**2)
+    mag = np.sqrt(muSun/radius)
+    theta = np.arctan2(y, x) + (math.pi / 2.0)
 
-    return mag * math.cos(theta), mag * math.sin(theta)
+    return mag * np.cos(theta), mag * np.sin(theta)
 
 def getVelocity(semiMajorAxis, x, y):
     muSun = 1.32712440018e20
-    radius = math.sqrt(x**2 + y**2)
-    mag = math.sqrt(muSun * ((2.0/radius) - (1/semiMajorAxis)))
-    theta = math.atan2(y, x) + (math.pi / 2.0)
+    radius = np.sqrt(x**2 + y**2)
+    magsqr = muSun * ((2.0/radius) - (1.0/semiMajorAxis))
+    mag = np.sqrt(np.clip(magsqr,0,None))
+    theta = np.arctan2(y, x) + (math.pi / 2.0)
 
-    return mag * math.cos(theta), mag * math.sin(theta)
+    return mag * np.cos(theta), mag * np.sin(theta)

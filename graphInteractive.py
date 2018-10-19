@@ -69,19 +69,25 @@ def getMeshGrid(n):
     x, y = np.meshgrid(x, y)
     return np.reshape(x, (-1)), np.reshape(y, (-1))
 
-def getVelocity(scale, offset, x, y):
-    x,y = (x,y)/scale + offset
-    u, v = physicsUtils.getAvgVelocity(x,y)
-    return ((u,v) - offset) * scale
+def getVelocity(scale, offset, x, y, semimajorAxis = None):
+    x, y = (x , y) / np.expand_dims(scale[:2], 1) + np.expand_dims(offset[:2],1)
+    if semimajorAxis is None:
+        u, v = physicsUtils.getAvgVelocity(x,y)
+    else:
+        u, v = physicsUtils.getVelocity(semimajorAxis, x, y)
+        print(u,v)
+    return ((u,v) - np.expand_dims(offset[2:4],1)) * np.expand_dims(scale[2:4], 1)
 
 # Returns an array of points for phi(x,y)
-def f(sess, scale, offset):
+# Include target orbit to calulate phi for eliptical paths about the sepcified
+# semimajor axis
+def f(sess, scale, offset, targetOrbit=None):
     n = 200
     # Setup surface plot
     x, y = getMeshGrid(n)
 
     # Setup velocity
-    u, v = getVelocity(scale, offset, x, y)
+    u, v = getVelocity(scale, offset, x, y, semimajorAxis=targetOrbit)
 
     # Calculate phi
     z = phi(sess, x,y,u,v)
@@ -105,15 +111,15 @@ with tf.Session(graph=tf.Graph()) as sess:
     scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
 
     # Default slider values
-    w0 = 0.001
+    w0 = physicsUtils.radius['earth']
     delta_w = 0.00001
 
     axcolor = 'c'
-    axMass = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
-    sMass = Slider(axMass, 'Mass', 0.00001, 0.05, valinit=w0, valstep=delta_w)
+    # axMass = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+    # sMass = Slider(axMass, 'Mass', 0.00001, 0.05, valinit=w0, valstep=delta_w)
 
 
-    x, y, z = f(sess, scale, offset)
+    x, y, z = f(sess, scale, offset, targetOrbit=w0)
 
     surface = ax.plot_surface(x, y, z, alpha=0.5)
 
@@ -121,35 +127,63 @@ with tf.Session(graph=tf.Graph()) as sess:
     # Add planet trajectories
     # TODO color planets individually
     planets_phi = phi2(sess, train_X)
-    ax.scatter(train_X[0], train_X[1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
+    ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
     #planets = np.load('./train/p400000.npy')
     #ax.scatter(planets[0], planets[1], planets[2], zdir='z', c=np.squeeze(planets[2]))
 #
 
-    showPlanets = True
+    # def update(val):
+    #     w = sMass.val
 
-    def update(val):
-        w = sMass.val
-        x,y,z = f(sess, scale, offset)
-        # surface.set_data(x,y)
-        # surface.set_3d_properties(z)
-        ax.clear()
-        surface = ax.plot_surface(x, y, z,alpha=0.5)
-        # if (showPlanets):
-        #     ax.scatter(planets[0], planets[1], planets[2], zdir='z', c=np.squeeze(planets[2]))
-        ax.scatter(train_X[0], train_X[1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
+    #     useSlider = button.get_active()
+    #     if useSlider:
+    #         x,y,z = f(sess, scale, offset)
+    #         ax.clear()
+    #         surface = ax.plot_surface(x, y, z,alpha=0.5)
+    #         # if (showPlanets):
+    #         #     ax.scatter(planets[0], planets[1], planets[2], zdir='z', c=np.squeeze(planets[2]))
+    #         ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
 
 
-        fig.canvas.draw_idle()
-    sMass.on_changed(update)
+    #         fig.canvas.draw_idle()
+    #     else:
+    #         return
 
-    resetax = plt.axes([0.8, 0.025, 0.1, 0.04])
-    button = Button(resetax, 'Toggle Planets', color=axcolor, hovercolor='0.975')
+    # sMass.on_changed(update)
 
-    def reset(event,showPlanets):
-        showPlanets = not showPlanets
-        if showPlanets:
-            ax.scatter(planets[0], planets[1], planets[2], zdir='z', c=np.squeeze(planets[2]))
-    button.on_clicked(lambda event : reset(event,showPlanets))
+
+
+    class Index(object):
+        ind = 0
+
+        def next(self, event):
+            self.ind += 1
+            i = self.ind % len(planets)
+            target = physicsUtils.radius[planets[i]]
+            x,y,z = f(sess, scale, offset, targetOrbit=target)
+            ax.clear()
+            ax.plot_surface(x, y, z,alpha=0.5)
+            ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
+            fig.canvas.draw_idle()
+            print(target)
+            
+        def prev(self, event):
+            self.ind -= 1
+            i = self.ind % len(planets)
+            target = physicsUtils.radius[planets[i]]
+            x,y,z = f(sess, scale, offset, targetOrbit=target)
+            ax.clear()
+            ax.plot_surface(x, y, z,alpha=0.5)
+            ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
+            fig.canvas.draw_idle()
+        
+    calback = Index()
+    axprev = plt.axes([0.7, 0.025, 0.1, 0.04])
+    axnext = plt.axes([0.81, 0.025, 0.1, 0.04])
+    bnext = Button(axnext, 'Next Planet', color=axcolor, hovercolor='0.975')
+    bnext.on_clicked(calback.next)
+    bprev = Button(axprev, 'Prev Planets', color=axcolor, hovercolor='0.975')
+    bprev.on_clicked(calback.prev)
+    
 
     plt.show()

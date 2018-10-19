@@ -55,7 +55,7 @@ checkpoint_int = 100000
 pre_train_steps  = 1000
 viz_step         = 5000
 #######################
-a = 0.01 # GradNorm Weight
+a = 0.00 # GradNorm Weight
 b = 0.00 # Prediction Weight
 g = 0.1 # Scale for Phi
 lr = 0.01 # Learning Rate
