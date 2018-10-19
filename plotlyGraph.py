@@ -1,12 +1,13 @@
-
+#!/usr/bin/python3
 import math
+import plotly                   # RAH 
+import plotly.graph_objs as go  # RAH
 
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
-
-from matplotlib.widgets import Slider, Button, RadioButtons
-from mpl_toolkits.mplot3d import Axes3D
+#import matplotlib.pyplot as plt
+#from matplotlib.widgets import Slider, Button, RadioButtons
+#from mpl_toolkits.mplot3d import Axes3D
 
 from dataLoader import get_data, datasets
 import physicsUtils
@@ -103,87 +104,59 @@ with tf.Session(graph=tf.Graph()) as sess:
     new_saver = tf.train.import_meta_graph('./network/400000.meta')
     new_saver.restore(sess, './network/400000')
 
-    # Setup plot
-    fig = plt.figure(num=0)
-    ax = fig.add_subplot(111, projection='3d')
-
     # Load planets and scale values
     scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
 
-    # Default slider values
-    w0 = physicsUtils.radius['earth']
-    delta_w = 0.00001
+    # For each planet, plot the values to an interactive <planet>.html
+    for planet in planets:
+        print ("Planet:",planet)
+        w0 = physicsUtils.radius[planet]
+        delta_w = 0.00001
 
-    axcolor = 'c'
-    # axMass = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
-    # sMass = Slider(axMass, 'Mass', 0.00001, 0.05, valinit=w0, valstep=delta_w)
+        x, y, z = f(sess, scale, offset, targetOrbit=w0)
 
-
-    x, y, z = f(sess, scale, offset, targetOrbit=w0)
-
-    surface = ax.plot_surface(x, y, z, alpha=0.5)
-
-
-    # Add planet trajectories
-    # TODO color planets individually
-    planets_phi = phi2(sess, train_X)
-    ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
-    #planets = np.load('./train/p400000.npy')
-    #ax.scatter(planets[0], planets[1], planets[2], zdir='z', c=np.squeeze(planets[2]))
-#
-
-    # def update(val):
-    #     w = sMass.val
-
-    #     useSlider = button.get_active()
-    #     if useSlider:
-    #         x,y,z = f(sess, scale, offset)
-    #         ax.clear()
-    #         surface = ax.plot_surface(x, y, z,alpha=0.5)
-    #         # if (showPlanets):
-    #         #     ax.scatter(planets[0], planets[1], planets[2], zdir='z', c=np.squeeze(planets[2]))
-    #         ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
-
-
-    #         fig.canvas.draw_idle()
-    #     else:
-    #         return
-
-    # sMass.on_changed(update)
-
-
-
-    class Index(object):
-        ind = 0
-
-        def next(self, event):
-            self.ind += 1
-            i = self.ind % len(planets)
-            target = physicsUtils.radius[planets[i]]
-            x,y,z = f(sess, scale, offset, targetOrbit=target)
-            ax.clear()
-            ax.plot_surface(x, y, z,alpha=0.5)
-            ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
-            fig.canvas.draw_idle()
-            print(target)
-            
-        def prev(self, event):
-            self.ind -= 1
-            i = self.ind % len(planets)
-            target = physicsUtils.radius[planets[i]]
-            x,y,z = f(sess, scale, offset, targetOrbit=target)
-            ax.clear()
-            ax.plot_surface(x, y, z,alpha=0.5)
-            ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
-            fig.canvas.draw_idle()
-        
-    calback = Index()
-    axprev = plt.axes([0.7, 0.025, 0.1, 0.04])
-    axnext = plt.axes([0.81, 0.025, 0.1, 0.04])
-    bnext = Button(axnext, 'Next Planet', color=axcolor, hovercolor='0.975')
-    bnext.on_clicked(calback.next)
-    bprev = Button(axprev, 'Prev Planets', color=axcolor, hovercolor='0.975')
-    bprev.on_clicked(calback.prev)
+        ## Plotly equivalent?
+        plotlyTrace1 = go.Surface(x=x, # Passing x and y with z, gives the correct axis scaling/values
+                                  y=y,
+                                  z=z,
+                                  showscale=False, # This turns off the scale colormap on the side - don't think we need it
+                                  opacity=0.9)
+        plotlyLayout = go.Layout(title=planet.upper(),
+                                 titlefont=dict(
+                                     size=64,        # Quite large
+                                     color='#FF1010' # A rather bold red
+                                     ),
+                                 autosize=True,
+                                 yaxis=dict(
+                                     autorange = False,
+                                     range=[-1,1]
+                                 ),
+                                 xaxis=dict(
+                                     autorange = False,
+                                     range=[-1,1]
+                                 ),
+                                 margin=dict(
+                                     l=65,
+                                     r=50,
+                                     b=65,
+                                     t=200,
+                                 ),
+        )
     
-
-    plt.show()
+    
+        # Add planet trajectories
+        # TODO color planets individually
+        planets_phi = phi2(sess, train_X)
+    
+        plotlyTrace2 = go.Scatter3d(
+            x=train_X[:,0],
+            y=train_X[:,1],
+            z=planets_phi.ravel(), # In order to get from 2d to 1d, use ravel()
+            mode='markers',
+        )
+        
+    
+        plotlyData = [plotlyTrace1,plotlyTrace2]
+        plotlyFig = go.Figure(data=plotlyData, layout=plotlyLayout)
+        plotly.offline.plot(plotlyFig, filename=planet+'.html')
+        ## Plotly done

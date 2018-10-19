@@ -48,16 +48,16 @@ def trippleLayer(X, outDim = 16):
 
 
 #######################
-train_epoch =    500000
+train_epoch =   2000000
 display_step =     1000
 summary_step =     2000
 checkpoint_int = 100000
 pre_train_steps  = 1000
-viz_step         = 5000
+viz_step         = 999999999999999
 #######################
 a = 0.01 # GradNorm Weight
 b = 0.00 # Prediction Weight
-g = 0.1 # Scale for Phi
+g = 0.01  # Scale for Phi
 lr = 0.01 # Learning Rate
 #######################
     
@@ -186,9 +186,9 @@ def main():
         #timeStr = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M')
         train_writer = tf.summary.FileWriter('./train/alpha-' + str(a) + 'beta-' + str(b) + 'gama-' + str(g), sess.graph)
         writers = [tf.summary.FileWriter(name) for name in summary_lables]
-        dic = {'X:0':train_X, 'F:0':train_F}
+        dic = {'X:0':train_X, 'F:0':train_F}#, 'Y:0':train_Y}
 
-        for epoch in range(train_epoch):
+        for epoch in range(train_epoch+1):
             
             if epoch > pre_train_steps:
                 if epoch % summary_step == 0:
