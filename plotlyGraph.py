@@ -2,6 +2,7 @@
 import math
 import plotly                   # RAH 
 import plotly.graph_objs as go  # RAH
+import plotly.colors as plotlyColors
 
 import numpy as np
 import tensorflow as tf
@@ -22,6 +23,19 @@ planets = [
     'uranus',
     'venus']
 
+colorscale = [
+'rgb(167, 119, 12)',
+'rgb(197, 96, 51)',
+'rgb(217, 67, 96)',
+'rgb(221, 38, 163)',
+'rgb(196, 59, 224)',
+'rgb(153, 97, 244)',
+'rgb(95, 127, 228)',
+'rgb(40, 144, 183)',
+'rgb(15, 151, 136)',
+'rgb(39, 153, 79)',
+'rgb(119, 141, 17)',
+'rgb(167, 119, 12)']
 
 # Testing to validate getVelocity aprox is reasonable
 # scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmark = get_data(shuffle=False)
@@ -101,8 +115,8 @@ def f(sess, scale, offset, targetOrbit=None):
 with tf.Session(graph=tf.Graph()) as sess:
 
     # Load the trained model
-    new_saver = tf.train.import_meta_graph('./network/400000.meta')
-    new_saver.restore(sess, './network/400000')
+    new_saver = tf.train.import_meta_graph('./network/10000000.meta')
+    new_saver.restore(sess, './network/10000000')
 
     # Load planets and scale values
     scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
@@ -122,6 +136,7 @@ with tf.Session(graph=tf.Graph()) as sess:
                                   showscale=False, # This turns off the scale colormap on the side - don't think we need it
                                   opacity=0.9)
         plotlyLayout = go.Layout(title=planet.upper(),
+                                 colorway=colorscale,
                                  titlefont=dict(
                                      size=64,        # Quite large
                                      color='#FF1010' # A rather bold red
@@ -148,6 +163,30 @@ with tf.Session(graph=tf.Graph()) as sess:
         # TODO color planets individually
         planets_phi = phi2(sess, train_X)
     
+        planetTraces = []
+        step = int(train_X.shape[0]/8)
+        print(step)
+        for p in range(8):
+            trace = go.Scatter3d(
+                x=train_X[step*p:step*(p+1),0],
+                y=train_X[step*p:step*(p+1),1],
+                z=planets_phi.ravel()[step*p:step*(p+1)], # In order to get from 2d to 1d, use ravel()
+                mode='markers',
+                name=planets[p].capitalize()
+                # marker=dict(
+                #     color='rgb(127, 127, 127)',
+                #     size=12,
+                #     symbol='circle',
+                #     line=dict(
+                #         color='rgb(204, 204, 204)',
+                #         width=1
+                #     ),
+                #     opacity=0.9
+                # )
+            )
+
+            planetTraces.append(trace)
+
         plotlyTrace2 = go.Scatter3d(
             x=train_X[:,0],
             y=train_X[:,1],
@@ -156,7 +195,8 @@ with tf.Session(graph=tf.Graph()) as sess:
         )
         
     
-        plotlyData = [plotlyTrace1,plotlyTrace2]
+        planetTraces.append(plotlyTrace1)
+        plotlyData = planetTraces
         plotlyFig = go.Figure(data=plotlyData, layout=plotlyLayout)
         plotly.offline.plot(plotlyFig, filename=planet+'.html')
         ## Plotly done
