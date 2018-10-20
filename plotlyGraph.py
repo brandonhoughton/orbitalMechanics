@@ -20,7 +20,8 @@ planets = [
     'neptune',
     'saturn',
     'uranus',
-    'venus']
+    'venus',
+    'none']
 
 
 # Testing to validate getVelocity aprox is reasonable
@@ -87,6 +88,8 @@ def f(sess, scale, offset, targetOrbit=None):
     # Setup surface plot
     x, y = getMeshGrid(n)
 
+    #z = np.ones_like(x)
+
     # Setup velocity
     u, v = getVelocity(scale, offset, x, y, semimajorAxis=targetOrbit)
 
@@ -101,8 +104,8 @@ def f(sess, scale, offset, targetOrbit=None):
 with tf.Session(graph=tf.Graph()) as sess:
 
     # Load the trained model
-    new_saver = tf.train.import_meta_graph('./network/400000.meta')
-    new_saver.restore(sess, './network/400000')
+    new_saver = tf.train.import_meta_graph('./network/500000.meta')
+    new_saver.restore(sess, './network/500000')
 
     # Load planets and scale values
     scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
@@ -110,7 +113,10 @@ with tf.Session(graph=tf.Graph()) as sess:
     # For each planet, plot the values to an interactive <planet>.html
     for planet in planets:
         print ("Planet:",planet)
-        w0 = physicsUtils.radius[planet]
+        if planet != 'none':
+            w0 = physicsUtils.radius[planet]
+        else:
+            w0 = None
         delta_w = 0.00001
 
         x, y, z = f(sess, scale, offset, targetOrbit=w0)

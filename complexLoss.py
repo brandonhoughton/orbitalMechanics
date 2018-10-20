@@ -8,6 +8,9 @@ from functools import reduce
 
 from dataLoader import get_data
 
+J = os.path.join
+E = os.path.exists
+
 def variable_summaries(var, groupName):
   """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
   with tf.name_scope(groupName):
@@ -48,18 +51,20 @@ def trippleLayer(X, outDim = 16):
 
 
 #######################
-train_epoch =   2000000
+train_epoch =    5000000
 display_step =     1000
 summary_step =     2000
 checkpoint_int = 100000
 pre_train_steps  = 1000
 viz_step         = 999999999999999
 #######################
-a = 0.01 # GradNorm Weight
+a = 0.0000001 # GradNorm Weight
 b = 0.00 # Prediction Weight
-g = 0.01  # Scale for Phi
+g = 0.00001  # Scale for Phi
 lr = 0.01 # Learning Rate
 #######################
+
+saveDir= input("Name this run...")
     
 def main():
 
@@ -98,6 +103,7 @@ def main():
             
         # Calculate dot product 
         with tf.name_scope('dotProd'):
+            #dotProd = tf.reduce_sum(tf.multiply(F, gradPhi), axis=1)   
             dotProd = tf.reduce_sum(tf.multiply(F, gradPhi)/tf.expand_dims(tf.norm(F, axis=1)*tf.norm(gradPhi, axis=1), dim=1), axis=1)            
 
         # Calculate gradient regualization term
@@ -158,9 +164,9 @@ def main():
 
     #Create list of merged summaries to visualize together on a single graph
     summary_lables = ['earth', 'jupiter', 'mars', 'mercury', 'neptune', 'saturn', 'uranus', 'venus'] 
-    summary_lables = ['./train/planets/' + planet for planet in summary_lables]
-    with tf.name_scope('planets'):
-        summary_list = [tf.summary.merge(variable_summaries_list(planet_val, summary_label)) for (planet_val, summary_label) in zip(planet_values, summary_lables)]
+    summary_lables = [saveDir + '/train/' + planet for planet in summary_lables]
+    # with tf.name_scope('planets'):
+    summary_list = [tf.summary.merge(variable_summaries_list(planet_val, summary_label)) for (planet_val, summary_label) in zip(planet_values, summary_lables)]
 
 
     # Create checkpoint saver
@@ -184,7 +190,7 @@ def main():
         sess.run(tf.global_variables_initializer())
         
         #timeStr = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M')
-        train_writer = tf.summary.FileWriter('./train/alpha-' + str(a) + 'beta-' + str(b) + 'gama-' + str(g), sess.graph)
+        train_writer = tf.summary.FileWriter(J('.',saveDir,'train', 'alpha-' + str(a) + 'beta-' + str(b) + 'gama-' + str(g)), sess.graph)
         writers = [tf.summary.FileWriter(name) for name in summary_lables]
         dic = {'X:0':train_X, 'F:0':train_F}#, 'Y:0':train_Y}
 
@@ -201,7 +207,7 @@ def main():
                     print(loss_, epoch)
 
                 if epoch % checkpoint_int == 0:
-                    saver.save(sess,save_path='./new_network/'+ str(epoch))
+                    saver.save(sess,save_path=J('.',saveDir,'network',str(epoch)))
 
                 if epoch % viz_step == 0:
                     phi = sess.run([Phi],feed_dict=viz_dic)
