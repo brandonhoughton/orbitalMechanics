@@ -13,6 +13,9 @@ import tensorflow as tf
 from dataLoader import get_data, datasets
 import physicsUtils
 
+from scipy.optimize import curve_fit
+
+
 planets = [
     'earth',
     'jupiter',
@@ -113,13 +116,38 @@ def f(sess, scale, offset, targetOrbit=None):
     return (np.reshape(x,(n,n)),np.reshape(y,(n,n)), np.reshape(z,(n,n)))
     #return (x, y, np.squeeze(z))
 
+def f2(planetX, planetY, planetPhi):
+    planetX = np.reshape(planetX, (None))
+    planetY = np.reshape(planetY, (None))
+    planetPhi = np.reshape(planetPhi, (None))
+    # Fit 1/r function
+    planetR = np.sqrt(planetX ** 2 + planetY ** 2)
+    def hyper(r, A, B):
+        return 1/(A*r) + B
+
+    A,B = curve_fit(hyper, planetR, planetPhi)[0]
+
+    n = 200
+
+    # Setup surface plot
+    x, y = getMeshGrid(n)
+    r = np.sqrt(x ** 2 + y ** 2)
+
+    # Calculate z
+    z = -1/(A*r) + B
+    z[z > 0.8] = np.nan
+
+    return (np.reshape(x,(n,n)),np.reshape(y,(n,n)), np.reshape(z,(n,n)))
+    
+
+
 
 
 with tf.Session(graph=tf.Graph()) as sess:
 
     # Load the trained model
-    new_saver = tf.train.import_meta_graph('./network/500000.meta')
-    new_saver.restore(sess, './network/500000')
+    new_saver = tf.train.import_meta_graph('./network/10000000.meta')
+    new_saver.restore(sess, './network/10000000')
 
     # Load planets and scale values
     scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
@@ -129,6 +157,7 @@ with tf.Session(graph=tf.Graph()) as sess:
         print ("Planet:",planet)
         if planet != 'none':
             w0 = physicsUtils.radius[planet]
+            continue
         else:
             w0 = None
         delta_w = 0.00001
@@ -140,7 +169,9 @@ with tf.Session(graph=tf.Graph()) as sess:
                                   y=y,
                                   z=z,
                                   showscale=False, # This turns off the scale colormap on the side - don't think we need it
-                                  opacity=0.9)
+                                  opacity=0.9,
+                                  name="Visualization")
+
         plotlyLayout = go.Layout(title=planet.upper(),
                                  colorway=colorscale,
                                  titlefont=dict(
@@ -168,6 +199,16 @@ with tf.Session(graph=tf.Graph()) as sess:
         # Add planet trajectories
         # TODO color planets individually
         planets_phi = phi2(sess, train_X)
+        train_R = np.sqrt(train_X[:,0] ** 2 + train_X[:,1] ** 2)
+        trainSubset = train_X[np.where(np.abs(train_R < 0.3))]
+
+        x, y, z = f2(trainSubset[:,0],trainSubset[:,1],phi2(sess, trainSubset).ravel())
+        curveFit = go.Surface(x=x, # Passing x and y with z, gives the correct axis scaling/values
+                            y=y,
+                            z=z,
+                            showscale=False, # This turns off the scale colormap on the side - don't think we need it
+                            opacity=0.9)
+
     
         planetTraces = []
         step = int(train_X.shape[0]/8)
@@ -201,7 +242,8 @@ with tf.Session(graph=tf.Graph()) as sess:
         )
         
     
-        planetTraces.append(plotlyTrace1)
+        #planetTraces.append(plotlyTrace1)
+        planetTraces.append(curveFit)
         plotlyData = planetTraces
         plotlyFig = go.Figure(data=plotlyData, layout=plotlyLayout)
         plotly.offline.plot(plotlyFig, filename=planet+'.html')
