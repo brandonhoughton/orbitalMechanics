@@ -141,6 +141,77 @@ def get_data(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= Tru
     return scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmarkResult
 
 
+def get_data_(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= True):
+    """ Read the specified orbit and shape it for regression"""   
+
+    samples = []
+    X_prev = []
+    X_list = []
+    F_list = []
+    Y_list = []
+
+    # Load the data to predict the next location and velocity
+    for planet in datasets:
+        with np.load(J(dataDir, planet)) as data:
+            traj = np.array(data['traj'], dtype=np.float32)
+            force = np.array(data['F'])
+
+            traj = np.reshape(np.reshape(traj, (-1,1), order='F'),(-1,4))
+            force = np.reshape(np.reshape(force, (-1,1), order='F'),(-1,4))
+
+            Xprev = np.roll(traj, shift = 2, axis = 0)[2:]
+            X = np.roll(traj, shift = 1, axis = 0)[1:-1]
+            F = np.roll(force, shift = 1, axis = 0)[1:-1]
+            Y = traj[:-2]
+        
+        X_prev.append(Xprev)
+        X_list.append(X)
+        F_list.append(F)
+        Y_list.append(Y)
+
+        samples.append(X.shape[0])
+
+
+    # Sample uniformly from each planet
+    minSamples = min(samples)
+
+    X_pall = np.empty((0,4), dtype=np.float32)
+    X_all = np.empty((0,4), dtype=np.float32)
+    F_all = np.empty((0,4), dtype=np.float32)
+    Y_all = np.empty((0,4), dtype=np.float32)
+    for n, xp, x, f, y in zip(samples, X_prev, X_list, F_list, Y_list):
+        #Select a random uniform subset of samples for each planet
+        if n > minSamples:
+            ids = np.random.choice(range(n), minSamples, replace=False)
+            xp= xp[ids]
+            x = x[ids]
+            f = f[ids]
+            y = y[ids]
+        
+        print(x.shape)
+        X_pall= np.append(X_pall,xp,axis=0)
+        X_all = np.append(X_all, x, axis=0)
+        F_all = np.append(F_all, f, axis=0)
+        Y_all = np.append(Y_all, y, axis=0)
+
+
+    # Scale Data
+    scale, offset, X_all = scaleOrbit(X_all, method=scaleMethod)
+
+    print ('Scale {}, Offset {}, Data{}'.format(scale, offset, X_all.shape))
+    print (X_all)
+
+    X_pall= scale * X_pall
+    F_all = scale * F_all
+    Y_all = scale * Y_all
+
+    (train_Xp, test_xp, train_X, test_X, train_F, test_F, train_Y, test_Y) = train_test_split(X_pall, X_all, F_all, Y_all, test_size=0, random_state=RANDOM_SEED, shuffle=shuffle)
+
+    benchmarkResult = getBenchmark(X, Y, method=benchmarkMethod)
+
+    return scale, offset, (train_Xp, test_xp, train_X, test_X, train_F, test_F, train_Y, test_Y), benchmarkResult
+
+
 def get_russ_data(planet = 0, scaleMethod='min-max', benchmarkMethod='momentum', shuffle= True):
     """ Read the specified orbit and shape it for regression"""   
 

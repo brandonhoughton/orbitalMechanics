@@ -10,7 +10,7 @@ import tensorflow as tf
 #from matplotlib.widgets import Slider, Button, RadioButtons
 #from mpl_toolkits.mplot3d import Axes3D
 
-from dataLoader import get_data, datasets
+from dataLoader import get_data, get_data_, datasets
 import physicsUtils
 
 planets = [
@@ -70,13 +70,14 @@ colorscale = [
     
 # Returns the network evaluated at each point
 def phi(sess, x, y, u, v):
-    viz_dic = {'X:0':np.array([x, y, u, v]).T}
+    viz_dic = {'X:0':np.array([x, y, u, v]).T,'Xp:0':np.array([x, y, u, v]).T}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
     return sess.run(op, feed_dict=viz_dic)
 
-def phi2(sess, X):
-    viz_dic = {'X:0':np.array(X)}
+def phi2(sess, X, Xp):
+    viz_dic = {'X:0':np.array(X),'Xp:0':np.array(Xp)}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
+    #op = sess.graph.get_tensor_by_name('pred_loss/dense/Sigmoid:0')
     return sess.run(op, feed_dict=viz_dic)
     
 def getMeshGrid(n):
@@ -118,11 +119,11 @@ def f(sess, scale, offset, targetOrbit=None):
 with tf.Session(graph=tf.Graph()) as sess:
 
     # Load the trained model
-    new_saver = tf.train.import_meta_graph('./network/500000.meta')
-    new_saver.restore(sess, './network/500000')
+    new_saver = tf.train.import_meta_graph('./network/2000000.meta')
+    new_saver.restore(sess, './network/2000000')
 
     # Load planets and scale values
-    scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
+    scale, offset, (train_Xp, _, train_X, _, _, _, _, _), benchmark = get_data_(shuffle=False)
 
     # For each planet, plot the values to an interactive <planet>.html
     for planet in planets:
@@ -167,7 +168,7 @@ with tf.Session(graph=tf.Graph()) as sess:
     
         # Add planet trajectories
         # TODO color planets individually
-        planets_phi = phi2(sess, train_X)
+        planets_phi = phi2(sess, train_X, train_Xp)
     
         planetTraces = []
         step = int(train_X.shape[0]/8)
