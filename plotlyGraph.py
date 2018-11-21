@@ -10,7 +10,7 @@ import tensorflow as tf
 #from matplotlib.widgets import Slider, Button, RadioButtons
 #from mpl_toolkits.mplot3d import Axes3D
 
-from dataLoader import get_data, datasets
+from dataLoader import get_data, get_data_, datasets
 import physicsUtils
 
 from scipy.optimize import curve_fit
@@ -73,13 +73,14 @@ colorscale = [
     
 # Returns the network evaluated at each point
 def phi(sess, x, y, u, v):
-    viz_dic = {'X:0':np.array([x, y, u, v]).T}
+    viz_dic = {'X:0':np.array([x, y, u, v]).T,'Xp:0':np.array([x, y, u, v]).T}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
     return sess.run(op, feed_dict=viz_dic)
 
-def phi2(sess, X):
-    viz_dic = {'X:0':np.array(X)}
+def phi2(sess, X, Xp):
+    viz_dic = {'X:0':np.array(X),'Xp:0':np.array(Xp)}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
+    #op = sess.graph.get_tensor_by_name('pred_loss/dense/Sigmoid:0')
     return sess.run(op, feed_dict=viz_dic)
     
 def getMeshGrid(n):
@@ -149,8 +150,9 @@ with tf.Session(graph=tf.Graph()) as sess:
     new_saver = tf.train.import_meta_graph('./network/10000000.meta')
     new_saver.restore(sess, './network/10000000')
 
+
     # Load planets and scale values
-    scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
+    scale, offset, (train_Xp, _, train_X, _, _, _, _, _), benchmark = get_data_(shuffle=False)
 
     # For each planet, plot the values to an interactive <planet>.html
     for planet in planets:
@@ -198,18 +200,7 @@ with tf.Session(graph=tf.Graph()) as sess:
     
         # Add planet trajectories
         # TODO color planets individually
-        planets_phi = phi2(sess, train_X)
-        train_R = np.sqrt(train_X[:,0] ** 2 + train_X[:,1] ** 2)
-        trainSubset = train_X[np.where(np.abs(train_R < 0.3))]
-
-        x, y, z = f2(trainSubset[:,0],trainSubset[:,1],phi2(sess, trainSubset).ravel())
-        curveFit = go.Surface(x=x, # Passing x and y with z, gives the correct axis scaling/values
-                            y=y,
-                            z=z,
-                            showscale=False, # This turns off the scale colormap on the side - don't think we need it
-                            opacity=0.9)
-
-    
+        planets_phi = phi2(sess, train_X, train_Xp)    
         planetTraces = []
         step = int(train_X.shape[0]/8)
         print(step)

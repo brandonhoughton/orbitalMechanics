@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons
 from mpl_toolkits.mplot3d import Axes3D
 
-from dataLoader import get_data, datasets
+from dataLoader import get_data, get_data_, datasets
 import physicsUtils
 
 planets = [
@@ -54,12 +54,12 @@ planets = [
     
 # Returns the network evaluated at each point
 def phi(sess, x, y, u, v):
-    viz_dic = {'X:0':np.array([x, y, u, v]).T}
+    viz_dic = {'X:0':np.array([x, y, u, v]).T,'Xp:0':np.array([x, y, u, v]).T}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
     return sess.run(op, feed_dict=viz_dic)
 
-def phi2(sess, X):
-    viz_dic = {'X:0':np.array(X)}
+def phi2(sess, X, Xp):
+    viz_dic = {'X:0':np.array(X), 'Xp:0':np.array(Xp)}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
     return sess.run(op, feed_dict=viz_dic)
     
@@ -108,7 +108,7 @@ with tf.Session(graph=tf.Graph()) as sess:
     ax = fig.add_subplot(111, projection='3d')
 
     # Load planets and scale values
-    scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
+    scale, offset, (train_Xp, _, train_X, _, _, _, _, _), benchmark = get_data_(shuffle=False)
 
     # Default slider values
     w0 = physicsUtils.radius['earth']
@@ -126,7 +126,7 @@ with tf.Session(graph=tf.Graph()) as sess:
 
     # Add planet trajectories
     # TODO color planets individually
-    planets_phi = phi2(sess, train_X)
+    planets_phi = phi2(sess, train_X, train_Xp)
     ax.scatter(train_X[:,0], train_X[:,1], planets_phi, zdir='z', c=np.squeeze(planets_phi))
     #planets = np.load('./train/p400000.npy')
     #ax.scatter(planets[0], planets[1], planets[2], zdir='z', c=np.squeeze(planets[2]))

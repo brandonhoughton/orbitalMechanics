@@ -1,0 +1,68 @@
+[1mdiff --git a/complexLoss.py b/complexLoss.py[m
+[1mindex 2513a63..cf1293b 100644[m
+[1m--- a/complexLoss.py[m
+[1m+++ b/complexLoss.py[m
+[36m@@ -46,6 +46,13 @@[m [mdef trippleLayer(X, outDim = 16):[m
+     head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, use_bias=True)[m
+     return head[m
+ [m
+[32m+[m[32mdef customDense(inDim = 4, outDim = 32):[m
+[32m+[m[32m    weights = tf.variable(tf.random_normal([inDim, outDim], name='customDenseWeights'))[m
+[32m+[m[32m    bias    = tf.variable(tf.random_normal([outDim], name='customDenseBias'))[m
+[32m+[m[32m    return (weights, bias)[m
+[32m+[m[41m    [m
+[32m+[m[32mdef customDenseInfer(w, b, input):[m
+[32m+[m[32m    return tf.add(tf.matmul(input, w), b)[m
+ [m
+ #######################[m
+ train_epoch =    500000[m
+[36m@@ -64,7 +71,7 @@[m [mlr = 0.01 # Learning Rate[m
+ def main():[m
+ [m
+     # Load data[m
+[31m-    scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmark = get_data(shuffle=False)[m
+[32m+[m[32m    scale, offset, (train_X, test_X, train_F, test_F, train_Xprev, test_Xprev, train_Y, test_Y), benchmark = get_data(shuffle=False)[m
+ [m
+     # Load data onto GPU memory - ensure network layers have GPU support[m
+     #with tf.device('/gpu:0'):[m
+[36m@@ -75,7 +82,8 @@[m [mdef main():[m
+         # if (b > 0):[m
+         #     Y = tf.identity(tf.constant(train_Y, dtype= tf.float32))[m
+ [m
+[31m-        # Define placeholders[m
+[32m+[m[32m        # Define placeholders (slower)[m
+[32m+[m[32m        Xprev = tf.placeholder(dtype= tf.float32, shape=[None, 4], name='XPrev')[m
+         X = tf.placeholder(dtype= tf.float32, shape=[None, 4], name='X')[m
+         F = tf.placeholder(dtype= tf.float32, shape=[None, 4], name = 'F')[m
+         if (b > 0):[m
+[36m@@ -83,7 +91,11 @@[m [mdef main():[m
+ [m
+         ## Define network[m
+         with tf.name_scope('Base_Network'):[m
+[31m-            baseNetwork = singleLayer(X, outDim=32)[m
+[32m+[m[32m            weights, bias = customDense(outDim=32)[m
+[32m+[m[32m            prevX = customDenseInfer(weights, bias, Xprev)[m
+[32m+[m[32m            currentX = customDenseInfer(weights, bias, X)[m
+[32m+[m[32m            baseNetwork = tf.concat([prevX, currentX], 1)[m
+[32m+[m[32m            #baseNetwork = singleLayer(X, outDim=32)[m
+ [m
+         with tf.name_scope('Phi'):[m
+             Phi = singleLayer(baseNetwork, outDim = 1)[m
+[36m@@ -134,7 +146,7 @@[m [mdef main():[m
+             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)[m
+ [m
+         with tf.name_scope('summaries'):[m
+[31m-            planet_values = [tf.slice(Phi, [4223 * i, 0], [4223, 1]) for i in range(8)][m
+[32m+[m[32m            planet_values = [tf.slice(Phi, [4222 * i, 0], [4222, 1]) for i in range(8)][m
+             means = [tf.reduce_mean(planetPhi) for planetPhi in planet_values][m
+             stratified_var = reduce(lambda x,y: (x + y) / 2, [tf.sqrt(tf.reduce_mean(tf.square(var - mean))) for (var, mean) in zip(planet_values, means)])[m
+ [m
+[36m@@ -186,7 +198,7 @@[m [mdef main():[m
+         #timeStr = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M')[m
+         train_writer = tf.summary.FileWriter('./train/alpha-' + str(a) + 'beta-' + str(b) + 'gama-' + str(g), sess.graph)[m
+         writers = [tf.summary.FileWriter(name) for name in summary_lables][m
+[31m-        dic = {'X:0':train_X, 'F:0':train_F}[m
+[32m+[m[32m        dic = {'X:0':train_X, 'Xprev:0':train_Xprev, 'F:0':train_F}[m
+ [m
+         for epoch in range(train_epoch):[m
+             [m
