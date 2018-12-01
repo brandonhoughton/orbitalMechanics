@@ -14,6 +14,28 @@ mass = {
     'neptune' : 1.02431e26
 }
 
+
+ids = {
+    'earth':0,
+    'jupiter':1,
+    'mars':2,
+    'mercury':3,
+    'neptune':4,
+    'saturn':5,
+    'uranus':6,
+    'venus':7}
+
+
+names = {
+    0:'earth',
+    1:'jupiter',
+    2:'mars',
+    3:'mercury',
+    4:'neptune',
+    5:'saturn',
+    6:'uranus',
+    7:'venus'}
+
 mass_sun = 1.989e30
 
 # Average orbital distance in m

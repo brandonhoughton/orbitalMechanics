@@ -1,0 +1,21 @@
+\documentclass[10pt,letterpaper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{subfig}
+\author{Brandon Houghton}
+\begin{document}
+
+We began working on training deep models to find invariants of pendulum motion. Before training could begin we need to develop a data pipeline to simulate pendulum data during training. Maintaining normalized inputs is critical in most deep architectures thus we also include a scaling step that  normalizes the data in such a way as to preserve the relationships of physical quantities. This data pipeline will then be attached to our previously developed training procedure in order to find invariants in the data. We expect to have initial results of training within the next week.
+
+We also worked on fitting linear models of known constants such as the Hamiltonian and angular momentum: 
+
+$$ \alpha L + \beta \hat H + c = \phi  $$
+ Given the size of the dataset, the existing data loading model which stored all parameters in memory, the data no-longer fits on a single GPU. We expect to run this experiment once the new method of sampling training data is implemented and also expect to have this result within the next week.
+
+
+
+
+\end{document}

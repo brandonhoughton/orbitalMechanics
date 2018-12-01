@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 import plotly                   # RAH
 import plotly.graph_objs as go  # RAH
+import itertools
 
 import numpy as np
 import tensorflow as tf
@@ -8,8 +9,8 @@ import tensorflow as tf
 #from matplotlib.widgets import Slider, Button, RadioButtons
 #from mpl_toolkits.mplot3d import Axes3D
 
-from src.dataLoader.planets import get_data_
-from src.dataLoader import physicsUtils
+from dataLoader.planets import get_data, get_data_
+from dataLoader import physicsUtils
 
 from scipy.optimize import curve_fit
 from scipy.constants import G
@@ -72,12 +73,14 @@ colorscale = [
     
 # Returns the network evaluated at each point
 def phi(sess, x, y, u, v):
-    viz_dic = {'X:0':np.array([x, y, u, v]).T,'Xp:0':np.array([x, y, u, v]).T}
+    viz_dic = {'X:0':np.array([x, y, u, v]).T}
+    #viz_dic = {'X:0':np.array([x, y, u, v]).T,'Xp:0':np.array([x, y, u, v]).T}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
     return sess.run(op, feed_dict=viz_dic)
 
-def phi2(sess, X, Xp):
-    viz_dic = {'X:0':np.array(X),'Xp:0':np.array(Xp)}
+def phi2(sess, X):
+    viz_dic = {'X:0':np.array(X)}
+    #viz_dic = {'X:0':np.array(X),'Xp:0':np.array(Xp)}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
     #op = sess.graph.get_tensor_by_name('pred_loss/dense/Sigmoid:0')
     return sess.run(op, feed_dict=viz_dic)
@@ -108,7 +111,12 @@ def f(sess, scale, offset, targetOrbit=None):
     #z = np.ones_like(x)
 
     # Setup velocity
-    u, v = getVelocity(scale, offset, x, y, semimajorAxis=targetOrbit)
+    if targetOrbit is not None:
+        radius = physicsUtils.radius[targetOrbit]
+    else:
+        radius = None
+
+    u, v = getVelocity(scale, offset, x, y, semimajorAxis=radius)
 
     # Calculate phi
     z = phi(sess, x,y,u,v)
@@ -125,7 +133,7 @@ def f2(planetID, planetX, planetY, planetvX, planetvY, planetPhi, targetOrbit = 
 
     planetPhi = np.reshape(planetPhi, (None))
 
-    m1 = np.apply_over_axes(lambda a: physicsUtils.mass[a[0]], planetID, axes=0)
+    m1 = np.array([physicsUtils.mass[id] for id in planet_ID])
     m2 = physicsUtils.mass_sun
 
     # Fit 1/r function
@@ -145,30 +153,41 @@ def f2(planetID, planetX, planetY, planetvX, planetvY, planetPhi, targetOrbit = 
 
     momentum = l(planetX, planetY, planetvX, planetvY)
 
-    indep = np.stack([hamiltonian, momentum], axis=-1)
+    indep = np.stack([hamiltonian, momentum], axis=-1).T
 
     def liniar(x, a, b, c):
         return a + b*x[0] + c*x[1]
 
     popt, pconv = curve_fit(liniar, indep, planetPhi)
 
+    print("Covariance: ", pconv)
+    print("Avg: ", sum(pconv)/len(pconv))
+
     n = 200
+
+    if targetOrbit is not None:
+        radius = physicsUtils.radius[targetOrbit]
+    else:
+        radius = None
 
     # Setup surface plot
     x, y = getMeshGrid(n)
-    u, v = getVelocity(scale, offset, x, y, semimajorAxis=targetOrbit)
+    u, v = getVelocity(scale, offset, x, y, semimajorAxis=radius)
 
-    avg_m1 = sum(physicsUtils.mass.values())/len(physicsUtils.mass)
+    if (targetOrbit is None):
+        avg_m1 = sum(physicsUtils.mass.values())/len(physicsUtils.mass)
+    else:
+        avg_m1 = physicsUtils.mass[targetOrbit]
     hamiltonian = h(avg_m1, x, y, u, v)
 
     momentum = l(x, y, u, v)
 
-    indep_grid = np.stack([hamiltonian, momentum], axis=-1)
+    indep_grid = np.stack([hamiltonian, momentum], axis=-1).T
 
     #r = np.sqrt(x ** 2 + y ** 2)
 
     # Calculate z
-    z = liniar(indep_grid, popt[0], popt[1], popt[2])
+    z = liniar(indep_grid, popt[0], popt[1], popt[2]).T
 
     # Don't messup autoscaling
     # z[z > 0.8] = np.nan
@@ -182,24 +201,25 @@ def f2(planetID, planetX, planetY, planetvX, planetvY, planetPhi, targetOrbit = 
 with tf.Session(graph=tf.Graph()) as sess:
 
     # Load the trained model
-    new_saver = tf.train.import_meta_graph('./network/10000000.meta')
-    new_saver.restore(sess, './network/10000000')
+    new_saver = tf.train.import_meta_graph('network/400000.meta')
+    new_saver.restore(sess, 'network/400000')
 
 
     # Load planets and scale values
-    scale, offset, (train_Xp, _, train_X, _, _, _, _, _), benchmark = get_data_(shuffle=False)
+    scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
+    #scale, offset, (train_Xp, _, train_X, _, _, _, _, _), benchmark = get_data_(shuffle=False)
 
     # For each planet, plot the values to an interactive <planet>.html
     for planet in planets:
         print ("Planet:",planet)
         if planet != 'none':
             w0 = physicsUtils.radius[planet]
-            continue
+            #continue
         else:
             w0 = None
         delta_w = 0.00001
 
-        x, y, z = f(sess, scale, offset, targetOrbit=w0)
+        x, y, z = f(sess, scale, offset, targetOrbit=planet)
 
         ## Plotly equivalent?
         plotlyTrace1 = go.Surface(x=x, # Passing x and y with z, gives the correct axis scaling/values
@@ -235,7 +255,7 @@ with tf.Session(graph=tf.Graph()) as sess:
     
         # Add planet trajectories
         # TODO color planets individually
-        planets_phi = phi2(sess, train_X, train_Xp)    
+        planets_phi = phi2(sess, train_X)
         planetTraces = []
         step = int(train_X.shape[0]/8)
         print(step)
@@ -263,14 +283,25 @@ with tf.Session(graph=tf.Graph()) as sess:
         plotlyTrace2 = go.Scatter3d(
             x=train_X[:,0],
             y=train_X[:,1],
-            z=planets_phi.ravel(), # In order to get from 2d to 1d, use ravel()
+            z=planets_phi.ravel(),  # In order to get from 2d to 1d, use ravel()
             mode='markers',
         )
-        
-    
-        #planetTraces.append(plotlyTrace1)
+
+        planets_phi = phi2(sess, train_X)
+
+        #planet_ID = np.repeat(range(8), step)
+        planet_ID = list(itertools.chain.from_iterable(itertools.repeat(x, step) for x in planets[:-1]))
+
+        x, y, z = f2(planet_ID, train_X[:, 0], train_X[:, 1], train_X[:, 2], train_X[:, 3], phi2(sess, train_X).ravel(), planet)
+        curveFit = go.Surface(x=x,  # Passing x and y with z, gives the correct axis scaling/values
+                            y=y,
+                            z=z,
+                            showscale=False,  # This turns off the scale colormap on the side - don't think we need it
+                            opacity=0.9)
+
+        # planetTraces.append(plotlyTrace1)
         planetTraces.append(curveFit)
         plotlyData = planetTraces
         plotlyFig = go.Figure(data=plotlyData, layout=plotlyLayout)
         plotly.offline.plot(plotlyFig, filename=planet+'.html')
-        ## Plotly done
+        # Plotly done

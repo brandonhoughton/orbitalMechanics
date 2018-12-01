@@ -1,10 +1,15 @@
 # Data folder
-/trajectories/
+*/trajectories/
 trajectories.zip
 
 *.json
 *.pyc
 *.meta
+*.idea
+*.aux
+*.log
+*.html
+*.gz
 *.index
 events.out.*
 *.data*

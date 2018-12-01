@@ -12,8 +12,6 @@ We observed that there was no explicit grounding of latent features when learnin
 
 Early results yield strong prediction accuracy although learned functions $\phi$ are similar to previous formulations directly predicting $\phi (x_t)$ as seen in figure \ref{fig:overfit}. Overall the new network was prone to over fitting and many hyper parameters resulted in a divergence of the network or a trivial $\phi(x)$ during training as the prediction error dominated the loss function, in the future, pre-training on the prediction network and then introducing a loss function over $\phi$ may produce more consistent results with less need for hyper-parameter tuning. We are continuing to experiment by reducing the size of the latent encoding of orbital parameters to the number of degrees in a 2D orbital trajectory motivated by the concept of the embedding becoming an auto-encoder for the trajectory.
 
-Additionally, we began evaluating the learned invariant of trajectories in terms of know invariants including the Hamiltonian and the angular momentum of the orbital bodies. Currently the fit of these functions is poor, notably the central orbits cause large spikes and a linear model of known invariants shows poor accuracy. We are now looking into adding non-linearities into the known invariants and conducting a hyper parameter sweep to determine if any such learned deep invariants can be well represented as a function of known invariants. 
-
 
 \begin{figure}
 	\centering

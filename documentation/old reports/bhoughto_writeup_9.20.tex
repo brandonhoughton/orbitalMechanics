@@ -1,0 +1,66 @@
+\documentclass[10pt,letterpaper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\title{On The Recovery of Planetary Energy Functions using Deep Neural Networks}
+\author{Brandon Houghton}
+
+
+\begin{document}
+
+
+\maketitle
+
+\section{Problem Formulation}
+
+Two-body problem: in the previous formulation,
+\begin{align}
+\min_{\phi} \sum^{T}_{t = 1} & \Vert \dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right) \Vert^2_2
+\end{align}
+This converged in less than 3 epochs and did not produce any meaningful $\phi()$. As found last week the solution found would simply ignore any inputs and return $0$.
+
+
+As discussed we experimented with adding a term to maximize the gradients of $\phi()$ yielding the minimization: 
+\begin{align}
+\min_{\phi} \sum^{T}_{t = 1} & \left( \Vert \dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right) \Vert^2_2 + \frac{1}{\Vert \bigtriangledown \phi \left( \pmb{r}_t \right) \Vert^2_2} \right)
+\end{align}
+However as $\bigtriangledown\phi()$ was highly variant solving this encountered issues with numeric stability and would underflow/overflow for various training hyper-parameters.
+
+
+To combat the numerical stability we experimented with log of the norm of the gradient of phi:
+\begin{align}
+\min_{\phi} \sum^{T}_{t = 1} & \left( \Vert \dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right) \Vert^2_2 -
+\log{ \left( \Vert \bigtriangledown \phi \left( \pmb{r}_t \right) \Vert^2_2 \right)} \right)
+\end{align}
+This minimization again suffered from numerical stability.
+
+
+Given our goal of minimizing the dot product $\dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right)$ we minimized the cosine distance between $\dot{\pmb{r}_t}$ and $ \bigtriangledown \phi \left( \pmb{r}_t \right)$ and instead of maximizing the gradient we simple enforce that $\Vert \bigtriangledown\phi({\pmb r}_t) \Vert = 1$ along the trajectory:
+\begin{align}
+\min_{\phi} \sum^{T}_{t = 1} &  
+\left( \left\vert
+	\frac{\dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right)}{{\Vert f_t \Vert}^2_2 * {\Vert \bigtriangledown \phi (\pmb{r}_t) \Vert}^2_2}
+ \right \vert
+ - \left( 1-\left\Vert \bigtriangledown \phi \left( \pmb{r}_t \right) \right\Vert^2_2 \right)^2 \right)
+\end{align}
+This objective results in a well defined gradient for minimization. Producing a phi that is constant across $ {\pmb r} \in T$. However this phi after convergence decreases consistently for each epoch across multiple planets. This may be a result of over-fitting however as it is only seen after 100k epochs for a small 50 unit fully connected neural network. I will post a histogram of phi as a function of training to validate these claims.
+
+
+
+One of the potential concerns with the approach in (5) was unit-gradient magnitude was only enforced along the trajectory. We are currently testing the effect on regularizing the entire field to be unit length:
+\begin{align}
+\min_{\phi} \sum^{T}_{t = 1} &  
+	\left\vert
+	\frac{\dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right)}{{\Vert f_t \Vert}^2_2 * {\Vert \bigtriangledown \phi (\pmb{r}_t) \Vert}^2_2}
+	\right\vert
+ -
+\sum_{x \in R^4}\left( 1-\left\Vert \bigtriangledown \phi ( x ) \right\Vert^2_2 \right)^2
+\end{align}
+
+
+\section{Experiments}
+
+
+
+\end{document}
