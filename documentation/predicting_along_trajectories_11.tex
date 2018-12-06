@@ -1,4 +1,4 @@
-\documentclass[10pt,letterpaper]{report}
+ 	\documentclass[10pt,letterpaper]{report}
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
 \usepackage{amsfonts}
@@ -8,11 +8,11 @@
 \author{Brandon Houghton}
 \begin{document}
 
-We observed that there was no explicit grounding of latent features when learning invariants of the data. This can cause learned functions to depend on the random initialization of network weights or bias in sampling of batches. Many useful invariants $\phi^*(x)$ define fundamental parameters of an orbital trajectory and as such can be used to update the state of that trajectory. Thus we used the formulation shown in figure \ref{fig:prednetwork} to drive the latent feature space of the shared network to infer parameters necessary for prediction. This formulation ensures that learned embeddings for $x_t$ encode sufficient information to predict the following state of the orbital trajectory.
+Previous formulations directly minimized $\bigtriangledown \phi$ without any objective for $\phi$ directly. Therefore the features found by the nerual network can be arbitrary and may not allow physically defined invarients to be discovered. This can cause learned functions to depend on the random initialization of network weights or bias in sampling of batches. Many useful orbital invariants define fundamental parameters of a trajectory and as such can be used to update the state of that trajectory. Thus we used the formulation shown in figure \ref{fig:prednetwork} to drive the latent feature space of the shared network to infer parameters necessary for prediction. This formulation ensures that learned embeddings for $x_t$ encode sufficient information to predict the following state of the orbital trajectory.
 
 Early results yield strong prediction accuracy although learned functions $\phi$ are similar to previous formulations directly predicting $\phi (x_t)$ as seen in figure \ref{fig:overfit}. Overall the new network was prone to over fitting and many hyper parameters resulted in a divergence of the network or a trivial $\phi(x)$ during training as the prediction error dominated the loss function, in the future, pre-training on the prediction network and then introducing a loss function over $\phi$ may produce more consistent results with less need for hyper-parameter tuning. We are continuing to experiment by reducing the size of the latent encoding of orbital parameters to the number of degrees in a 2D orbital trajectory motivated by the concept of the embedding becoming an auto-encoder for the trajectory.
 
-Additionally, we began evaluating the learned invariant of trajectories in terms of know invariants including the Hamiltonian and the angular momentum of the orbital bodies. Currently the fit of these functions is poor, notably the central orbits cause large spikes and a linear model of known invariants shows poor accuracy. We are now looking into adding non-linearities into the known invariants and conducting a hyper parameter sweep to determine if any such learned deep invariants can be well represented as a function of known invariants.  
+Additionally, we began evaluating the learned invariant of trajectories in terms of know invariants including the Hamiltonian and the angular momentum of the orbital bodies. Currently the fit of these functions is poor, notably the central orbits cause large spikes and a linear combination of known invariants shows poor accuracy. We are now looking into adding non-linearities into the known invariants and conducting a hyper parameter sweep to determine if any such learned deep invariants can be well represented as a function of known invariants.  
 
 
 \begin{figure}
