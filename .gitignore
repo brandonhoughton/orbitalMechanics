@@ -13,6 +13,8 @@ trajectories.zip
 *.index
 events.out.*
 *.data*
+*.mat
+*.npz
 *.npy
 *.cpython*
 checkpoint
