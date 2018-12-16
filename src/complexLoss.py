@@ -4,7 +4,7 @@ import tensorflow as tf
 import numpy as np
 from functools import reduce
 
-from src.dataLoader.planets import get_data_
+from dataLoader.planets import get_data_, get_data_segmented
 
 J = os.path.join
 E = os.path.exists
@@ -69,7 +69,7 @@ saveDir = input("Name this run...")
 def main():
 
     # Load data
-    scale, offset, (train_Xp, test_Xp, train_X, test_X, train_F, test_F, train_Y, test_Y), benchmark = get_data_(shuffle=False)
+    scale, offset, (train_Xp, test_Xp, train_X, test_X, train_F, test_F, train_Y, test_Y), benchmark = get_data_segmented(shuffle=False, seed=42)
 
     # Load data onto GPU memory - ensure network layers have GPU support
     # with tf.device('/gpu:0'):
@@ -118,8 +118,9 @@ def main():
             gradMag = tf.norm(gradPhi, axis=1)   
 
         with tf.name_scope('grad_loss'):
-            #gradLoss = tf.reduce_mean(tf.square(gradMag - 1))       
-            gradLoss = tf.reduce_mean(tf.maximum(gradMag - 2, 0) + tf.maximum(1 - gradMag, 0))
+            # gradLoss = tf.reduce_mean(tf.square(gradMag - 1))
+            # gradLoss = tf.reduce_mean(tf.maximum(gradMag - 2, 0) + tf.maximum(1 - gradMag, 0))
+            gradLoss = tf.reduce_mean(tf.maximum(1 - gradMag, 0))
 
         if (b > 0):
             with tf.name_scope('pred_loss'):
@@ -146,16 +147,16 @@ def main():
         with tf.name_scope('train'):
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 
-        with tf.name_scope('summaries'):
-            planet_values = [tf.slice(Phi, [4222 * i, 0], [4222, 1]) for i in range(8)]
-            means = [tf.reduce_mean(planetPhi) for planetPhi in planet_values]
-            stratified_var = reduce(lambda x,y: (x + y) / 2, [tf.sqrt(tf.reduce_mean(tf.square(var - mean))) for (var, mean) in zip(planet_values, means)])
+        # with tf.name_scope('summaries'):
+        #     planet_values = [tf.slice(Phi, [4222 * i, 0], [4222, 1]) for i in range(8)]
+        #     means = [tf.reduce_mean(planetPhi) for planetPhi in planet_values]
+        #     stratified_var = reduce(lambda x,y: (x + y) / 2, [tf.sqrt(tf.reduce_mean(tf.square(var - mean))) for (var, mean) in zip(planet_values, means)])
 
             
 
     # Create summary statistics outside of GPU scope
     variable_summaries(Phi, "PhiSummary")
-    tf.summary.scalar("PhiByPlanetVar", stratified_var,)
+    # tf.summary.scalar("PhiByPlanetVar", stratified_var,)
 
     #variable_summaries(Pred, "Prediction")
     variable_summaries(gradPhi, "GradPhi")
@@ -174,7 +175,7 @@ def main():
     summary_lables = ['earth', 'jupiter', 'mars', 'mercury', 'neptune', 'saturn', 'uranus', 'venus'] 
     summary_lables = [saveDir + '/train/' + planet for planet in summary_lables]
     # with tf.name_scope('planets'):
-    summary_list = [tf.summary.merge(variable_summaries_list(planet_val, summary_label)) for (planet_val, summary_label) in zip(planet_values, summary_lables)]
+        # summary_list = [tf.summary.merge(variable_summaries_list(planet_val, summary_label)) for (planet_val, summary_label) in zip(planet_values, summary_lables)]
 
 
     # Create checkpoint saver
@@ -207,7 +208,7 @@ def main():
                 if epoch % summary_step == 0:
                     summary = sess.run([merged],feed_dict=dic)[0]
                     train_writer.add_summary(summary, epoch)
-                    [writer.add_summary(sess.run([summary],feed_dict=dic)[0], epoch) for (writer,summary) in zip(writers,summary_list)]
+                    # [writer.add_summary(sess.run([summary],feed_dict=dic)[0], epoch) for (writer,summary) in zip(writers,summary_list)]
 
                 if epoch % display_step == 0:
                     loss_ = sess.run(loss,feed_dict=dic)
