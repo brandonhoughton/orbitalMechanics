@@ -364,4 +364,4 @@ def get_raw_data(planet = 0, predictionHoizon = 1):
         return X, Y
         
 
-get_data_segmented(shuffle=False, seed=42)
+# get_data_segmented(shuffle=False, seed=42)

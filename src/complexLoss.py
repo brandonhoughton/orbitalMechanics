@@ -82,12 +82,14 @@ def main():
         # if (b > 0):
         #     Y = tf.identity(tf.constant(train_Y, dtype= tf.float32))
 
+        # Zero vector
+        zero = tf.Variable(tf.zeros([33776, 4], dtype=tf.float32))
         # Define placeholders
-        Xp = tf.placeholder(dtype= tf.float32, shape=[None, 4], name='Xp')
-        X = tf.placeholder(dtype= tf.float32, shape=[None, 4], name='X')
-        F = tf.placeholder(dtype= tf.float32, shape=[None, 4], name='F')
-        if (b > 0):
-            Y = tf.placeholder(dtype= tf.float32, shape=[None, 4], name='Y')
+        Xp = tf.placeholder_with_default(shape=[None, 4], name='Xp', input=zero)
+        X = tf.placeholder_with_default(shape=[None, 4], name='X', input=zero)
+        F = tf.placeholder_with_default(shape=[None, 4], name = 'F', input=zero)
+        if b > 0:
+            Y = tf.placeholder_with_default(shape=[None, 4], name='Y', input=zero)
 
         ## Define network
         with tf.name_scope('Base_Network'):
@@ -132,7 +134,8 @@ def main():
             mean = tf.reduce_mean(Phi)
             #phiLoss = tf.square(mean - 0.5) + tf.square(tf.sqrt(tf.reduce_mean(tf.square(Phi - mean))) - 0.08)
             phiLoss = tf.square(mean - 0.5)
-            
+            phiLoss2= tf.square(mean)
+
         with tf.name_scope('loss'):
             alpha = tf.constant(a, dtype=tf.float32) # Scaling factor for magnitude of gradient
             beta  = tf.constant(b, dtype=tf.float32)  # Scaling factor for prediction of next time step 
@@ -148,6 +151,10 @@ def main():
             
         with tf.name_scope('train'):
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
+
+        with tf.name_scope('fix_training'):
+            train2_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(gamma * phiLoss2)
+
 
         with tf.name_scope('summaries'):
             planet_values = [tf.slice(Phi, [4222 * i, 0], [4222, 1]) for i in range(8)]
@@ -218,10 +225,10 @@ def main():
                 #     np.save('./train/'+str(epoch), phi)
                 #     phi = sess.run([Phi],feed_dict=dic)
                 #     np.save('./train/p'+str(epoch),np.array([train_X[:,0], train_X[:,1], phi]))
-                    
-                    
 
-            sess.run([train_step],feed_dict=dic)
+            sess.run([train_step], feed_dict=dic)
+
+            # sess.run([train2_step])
 
 
 
