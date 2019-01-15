@@ -278,14 +278,14 @@ with tf.Session(graph=tf.Graph()) as sess:
                                      size=64,        # Quite large
                                      color='#433f3f' # A rather bold red
                                      ),
-                                 xaxis=dict(
+                                 yaxis=dict(
                                      title='Learned Phi',
                                      titlefont=dict(
                                          size=32,
                                          color='#444444'
                                      )
                                  ),
-                                 yaxis=dict(
+                                 xaxis=dict(
                                      title='Radius',
                                      titlefont=dict(
                                          size=32,
