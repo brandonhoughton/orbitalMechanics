@@ -1,5 +1,6 @@
 # Data folder
 */trajectories/
+data/*
 trajectories.zip
 
 *.json
