@@ -140,9 +140,9 @@ def f2(offset, scale, planetID, planetX, planetY, planetvX, planetvY, planetPhi,
     planetvX = np.reshape(planetvX, (None)) #+ (offset[2] * scale[2])
     planetvY = np.reshape(planetvY, (None)) #+ (offset[3] * scale[3])
 
-    print(np.mean(planetX))
-    print(np.mean(planetX - offset[0]))
-    print(np.mean(planetX - (offset[0] * scale[0])))
+    # print(np.mean(planetX))
+    # print(np.mean(planetX - offset[0]))
+    # print(np.mean(planetX - (offset[0] * scale[0])))
 
     planetPhi = np.reshape(planetPhi, (None))
 
@@ -219,127 +219,210 @@ def f2(offset, scale, planetID, planetX, planetY, planetvX, planetvY, planetPhi,
     # z[z > 0.8] = np.nan
 
     return (np.reshape(x,(n,n)),np.reshape(y,(n,n)), np.reshape(z,(n,n)))
-    
 
 
+# Returns the MSE for a linear model fit for phi(x)
+def fit_linear(offset, scale, planetX, planetY, planetvX, planetvY, planetPhi, targetOrbit=None):
+    # planetID = np.reshape(planetID, (None))
+    planetX = np.reshape(planetX, (None)) * (scale[0])
+    planetY = np.reshape(planetY, (None)) * (scale[1])
+    planetvY = np.reshape(planetvY, (None)) * (scale[3])
+    planetvX = np.reshape(planetvX, (None)) * (scale[2])
+
+    planetPhi = np.reshape(planetPhi, (None))
+
+    m1 = physicsUtils.mass_sun
+
+    # Hamiltonian
+    def h(x, y, vx, vy):
+        return (1 / 2) * (vx ** 2 + vy ** 2) - G * m1 / np.sqrt(x ** 2 + y ** 2)
+
+    # Angular Momentum
+    def l(x, y, vx, vy):
+        return x * vy - y * vx
+
+    hamiltonian = h(planetX, planetY, planetvX, planetvY)
+
+    momentum = l(planetX, planetY, planetvX, planetvY)
+
+    indep = np.stack([hamiltonian, momentum], axis=-1).T
+
+    def liniar(x, a, b, c):
+        return a + b * x[0] + c * x[1]
+
+    popt, pconv = curve_fit(liniar, indep, planetPhi)
+
+    print("\ta + bx + cy:", popt)
+    # print("Covariance: ", pconv)
+    # print("Avg: ", sum(pconv)/len(pconv))
+
+    # RMS
+    phi_est = liniar(indep, popt[0], popt[1], popt[2])
+    sqr_err = np.square(phi_est - planetPhi)
+    rms = np.sqrt(np.mean(sqr_err))
+
+    # # Per planet RMS
+    # step = int(planetX.shape[0] / 8)
+    # for p in range(8):
+    #     print('Planet ', planets[p])
+    #     print(planets[p], 'RMS', np.sqrt(np.mean(sqr_err[p * step:p * step + step])))
 
 
-with tf.Session(graph=tf.Graph()) as sess:
-
-    # Load the trained model
-    new_saver = tf.train.import_meta_graph('network/400000.meta')
-    new_saver.restore(sess, 'network/400000')
+    std = max(np.nanstd(planetPhi), 1e-12)
 
 
-    # Load planets and scale values
-    # scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False, scaleMethod='no_scale')
-    scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
-    dtrain_X = train_X + (offset * scale)
-    #scale, offset, (train_Xp, _, train_X, _, _, _, _, _), benchmark = get_data_(shuffle=False)
+    print('\tRMS: ', rms, 'STD', std, 'Ratio: ', rms / std)
 
-    # For each planet, plot the values to an interactive <planet>.html
-    for planet in planets:
-        print ("Planet:",planet)
-        if planet != 'none':
-            w0 = physicsUtils.radius[planet]
-            continue
-        else:
-            w0 = None
-        delta_w = 0.00001
+    return rms, rms / std
 
-        x, y, z = f(sess, scale, offset, targetOrbit=planet)
+    # n = 200
+    #
+    # if targetOrbit is not None and targetOrbit != 'none':
+    #     radius = physicsUtils.radius[targetOrbit]
+    # else:
+    #     radius = None
+    #
+    # # Setup surface plot
+    # x, y = getMeshGrid(n)
+    # u, v = getVelocity(scale, offset, x, y, semimajorAxis=radius)
+    #
+    # # if (targetOrbit is None):
+    # #     avg_m1 = sum(physicsUtils.mass.values())/len(physicsUtils.mass)
+    # # else:
+    # #     avg_m1 = physicsUtils.mass[targetOrbit]
+    # hamiltonian = h(x, y, u, v)
+    #
+    # momentum = l(x, y, u, v)
+    #
+    # indep_grid = np.stack([hamiltonian, momentum], axis=-1).T
+    #
+    # # r = np.sqrt(x ** 2 + y ** 2)
+    #
+    # # Calculate z
+    # z = liniar(indep_grid, popt[0], popt[1], popt[2]).T
+    #
+    # # Don't messup autoscaling
+    # # z[z > 0.8] = np.nan
+    #
+    # return (np.reshape(x, (n, n)), np.reshape(y, (n, n)), np.reshape(z, (n, n)))
 
-        ## Plotly equivalent?
-        # plotlyTrace1 = go.Surface(x=x, # Passing x and y with z, gives the correct axis scaling/values
-        #                           y=y,
-        #                           z=z,
-        #                           showscale=False, # This turns off the scale colormap on the side - don't think we need it
-        #                           opacity=0.9,
-        #                           name="Visualization")
-        plotlyTrace1 = go.Scatter(x=np.sqrt(x ** 2 + y ** 2), # Passing x and y with z, gives the correct axis scaling/values
-                                  y=z,
-                                  opacity=0.9,
-                                  name="Visualization")
+if __name__ == "__main__":
+    with tf.Session(graph=tf.Graph()) as sess:
 
-        plotlyLayout = go.Layout(title=planet.upper(),
-                                 colorway=colorscale,
-                                 titlefont=dict(
-                                     size=64,        # Quite large
-                                     color='#FF1010' # A rather bold red
+        # Load the trained model
+        new_saver = tf.train.import_meta_graph('network/400000.meta')
+        new_saver.restore(sess, 'network/400000')
+
+
+        # Load planets and scale values
+        # scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False, scaleMethod='no_scale')
+        scale, offset, (train_X, _, _, _, _, _, _, _), benchmark = get_data_(shuffle=False)
+        dtrain_X = train_X + (offset * scale)
+        #scale, offset, (train_Xp, _, train_X, _, _, _, _, _), benchmark = get_data_(shuffle=False)
+
+        # For each planet, plot the values to an interactive <planet>.html
+        for planet in planets:
+            print ("Planet:",planet)
+            if planet != 'none':
+                w0 = physicsUtils.radius[planet]
+                continue
+            else:
+                w0 = None
+            delta_w = 0.00001
+
+            x, y, z = f(sess, scale, offset, targetOrbit=planet)
+
+            ## Plotly equivalent?
+            # plotlyTrace1 = go.Surface(x=x, # Passing x and y with z, gives the correct axis scaling/values
+            #                           y=y,
+            #                           z=z,
+            #                           showscale=False, # This turns off the scale colormap on the side - don't think we need it
+            #                           opacity=0.9,
+            #                           name="Visualization")
+            plotlyTrace1 = go.Scatter(x=np.sqrt(x ** 2 + y ** 2), # Passing x and y with z, gives the correct axis scaling/values
+                                      y=z,
+                                      opacity=0.9,
+                                      name="Visualization")
+
+            plotlyLayout = go.Layout(title=planet.upper(),
+                                     colorway=colorscale,
+                                     titlefont=dict(
+                                         size=64,        # Quite large
+                                         color='#FF1010' # A rather bold red
+                                         ),
+                                     scene= dict(
+                                         yaxis=dict(
+                                             autorange = False,
+                                             range=[-1, 1]
+                                         ),
+                                         xaxis=dict(
+                                             autorange = False,
+                                             range=[-1, 1]
+                                         ),
+                                         zaxis=dict(
+                                             autorange=False,
+                                             range=[0, 0.8]
+                                         )),
+                                     margin=dict(
+                                         l=65,
+                                         r=50,
+                                         b=65,
+                                         t=200,
                                      ),
-                                 scene= dict(
-                                     yaxis=dict(
-                                         autorange = False,
-                                         range=[-1, 1]
-                                     ),
-                                     xaxis=dict(
-                                         autorange = False,
-                                         range=[-1, 1]
-                                     ),
-                                     zaxis=dict(
-                                         autorange=False,
-                                         range=[0, 0.8]
-                                     )),
-                                 margin=dict(
-                                     l=65,
-                                     r=50,
-                                     b=65,
-                                     t=200,
-                                 ),
-        )
-    
-    
-        # Add planet trajectories
-        planets_phi = phi2(sess, train_X)
-        planetTraces = []
-        step = int(train_X.shape[0]/8)
-        print(step)
-        for p in range(8):
-            # trace = go.Scatter3d(
-            #     x=train_X[step*p:step*(p+1),0],
-            #     y=train_X[step*p:step*(p+1),1],
-            #     z=planets_phi.ravel()[step*p:step*(p+1)], # In order to get from 2d to 1d, use ravel()
-            #     mode='markers',
-            #     name=planets[p].capitalize()
-            # )
-            trace = go.Scatter(
-                # x=np.log(
-                #     np.sqrt(train_X[step*p:step*(p+1),0] ** 2 + train_X[step*p:step*(p+1),1] ** 2)),
-                # y=np.log(
-                #     planets_phi.ravel()[step*p:step*(p+1)]), # In order to get from 2d to 1d, use ravel()
-                x=np.sqrt(train_X[step * p:step * (p + 1), 0] ** 2 + train_X[step * p:step * (p + 1), 1] ** 2),
-                y=planets_phi.ravel()[step * p:step * (p + 1)],  # In order to get from 2d to 1d, use ravel()
-                mode='markers',
-                name=planets[p].capitalize()
             )
 
-            planetTraces.append(trace)
 
-        # plotlyTrace2 = go.Scatter3d(
-        #     x=train_X[:,0],
-        #     y=train_X[:,1],
-        #     z=planets_phi.ravel(),  # In order to get from 2d to 1d, use ravel()
-        #     mode='markers',
-        # )
+            # Add planet trajectories
+            planets_phi = phi2(sess, train_X)
+            planetTraces = []
+            step = int(train_X.shape[0]/8)
+            print(step)
+            for p in range(8):
+                # trace = go.Scatter3d(
+                #     x=train_X[step*p:step*(p+1),0],
+                #     y=train_X[step*p:step*(p+1),1],
+                #     z=planets_phi.ravel()[step*p:step*(p+1)], # In order to get from 2d to 1d, use ravel()
+                #     mode='markers',
+                #     name=planets[p].capitalize()
+                # )
+                trace = go.Scatter(
+                    # x=np.log(
+                    #     np.sqrt(train_X[step*p:step*(p+1),0] ** 2 + train_X[step*p:step*(p+1),1] ** 2)),
+                    # y=np.log(
+                    #     planets_phi.ravel()[step*p:step*(p+1)]), # In order to get from 2d to 1d, use ravel()
+                    x=np.sqrt(train_X[step * p:step * (p + 1), 0] ** 2 + train_X[step * p:step * (p + 1), 1] ** 2),
+                    y=planets_phi.ravel()[step * p:step * (p + 1)],  # In order to get from 2d to 1d, use ravel()
+                    mode='markers',
+                    name=planets[p].capitalize()
+                )
 
-        planets_phi = phi2(sess, train_X)
+                planetTraces.append(trace)
 
-        #planet_ID = np.repeat(range(8), step)
-        planet_ID = list(itertools.chain.from_iterable(itertools.repeat(x, step) for x in planets[:-1]))
+            # plotlyTrace2 = go.Scatter3d(
+            #     x=train_X[:,0],
+            #     y=train_X[:,1],
+            #     z=planets_phi.ravel(),  # In order to get from 2d to 1d, use ravel()
+            #     mode='markers',
+            # )
 
-        x, y, z = f2(offset, scale, planet_ID, train_X[:, 0], train_X[:, 1], train_X[:, 2], train_X[:, 3], phi2(sess, train_X).ravel(), planet)
-        # curveFit = go.Surface(x=x,  # Passing x and y with z, gives the correct axis scaling/values
-        #                     y=y,
-        #                     z=z,
-        #                     showscale=False,  # This turns off the scale colormap on the side - don't think we need it
-        #                     opacity=0.9)
-        curveFit = go.Scatter(x=np.sqrt(x ** 2 + y ** 2).ravel(), # Passing x and y with z, gives the correct axis scaling/values
-                            y=z,
-                            opacity=0.9)
+            planets_phi = phi2(sess, train_X)
 
-        # planetTraces.append(plotlyTrace1)
-        planetTraces.append(curveFit)
-        plotlyData = planetTraces
-        plotlyFig = go.Figure(data=plotlyData, layout=plotlyLayout)
-        plotly.offline.plot(plotlyFig, filename=planet+'.html')
-        # Plotly done
+            #planet_ID = np.repeat(range(8), step)
+            planet_ID = list(itertools.chain.from_iterable(itertools.repeat(x, step) for x in planets[:-1]))
+
+            x, y, z = f2(offset, scale, planet_ID, train_X[:, 0], train_X[:, 1], train_X[:, 2], train_X[:, 3], phi2(sess, train_X).ravel(), planet)
+            # curveFit = go.Surface(x=x,  # Passing x and y with z, gives the correct axis scaling/values
+            #                     y=y,
+            #                     z=z,
+            #                     showscale=False,  # This turns off the scale colormap on the side - don't think we need it
+            #                     opacity=0.9)
+            curveFit = go.Scatter(x=np.sqrt(x ** 2 + y ** 2).ravel(), # Passing x and y with z, gives the correct axis scaling/values
+                                y=z,
+                                opacity=0.9)
+
+            # planetTraces.append(plotlyTrace1)
+            planetTraces.append(curveFit)
+            plotlyData = planetTraces
+            plotlyFig = go.Figure(data=plotlyData, layout=plotlyLayout)
+            plotly.offline.plot(plotlyFig, filename=planet+'.html')
+            # Plotly done

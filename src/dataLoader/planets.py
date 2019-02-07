@@ -154,7 +154,7 @@ def get_data(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= Tru
     return scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmarkResult
 
 
-def get_data_(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= True):
+def get_data_(scaleMethod='no_scale', benchmarkMethod='momentum_mse', shuffle= True):
     """ Read the specified orbit and shape it for regression"""   
 
     samples = []
@@ -201,7 +201,7 @@ def get_data_(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= Tr
             f = f[ids]
             y = y[ids]
         
-        print(x.shape)
+        # print(x.shape)
         X_pall= np.append(X_pall,xp,axis=0)
         X_all = np.append(X_all, x, axis=0)
         F_all = np.append(F_all, f, axis=0)
@@ -210,9 +210,9 @@ def get_data_(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= Tr
 
     # Scale Data
     scale, offset, X_all = scaleOrbit(X_all, method=scaleMethod)
-
-    print ('Scale {}, Offset {}, Data{}'.format(scale, offset, X_all.shape))
-    print (X_all)
+    #
+    # print ('Scale {}, Offset {}, Data{}'.format(scale, offset, X_all.shape))
+    # print (X_all)
 
     X_pall= scale * X_pall
     F_all = scale * F_all

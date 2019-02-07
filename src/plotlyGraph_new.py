@@ -239,8 +239,8 @@ def f2(offset, scale, planetID, planetX, planetY, planetvX, planetvY, planetPhi,
 with tf.Session(graph=tf.Graph()) as sess:
 
     # Load the trained model
-    new_saver = tf.train.import_meta_graph('network/400000.meta')
-    new_saver.restore(sess, 'network/400000')
+    new_saver = tf.train.import_meta_graph('network/300000.meta')
+    new_saver.restore(sess, 'network/300000')
 
 
     # Load planets and scale values

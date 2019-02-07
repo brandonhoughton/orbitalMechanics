@@ -15,34 +15,8 @@ RANDOM_SEED = 42
 
 # Expects a 4xn vector with the first two components representing position 
 # and the next two components representing the first derivative of position
-def scaleOrbit(vector, method='min-max'):
-    if (method == 'physical'):
-        # Shift position components
-        offset = np.append(np.mean(vector[0:2,:],axis=1), np.zeros(2))
-        vector = (vector.transpose() - offset).transpose()
-        print (offset)
-
-        # Scale each component uniformly
-        scale = 1/np.max(np.abs(vector))
-        print (scale)
-
-        return scale, offset, np.multiply(vector, scale)
-    elif (method == 'min-max'):
-        # Shift position components
-        offset = np.mean(vector,axis=0)
-        scale = 1 / np.max(np.abs(vector - offset), axis=0)
-        s1 = (scale[0] + scale[1]) / 2
-        scale[0:2] = s1
-        s2 = (scale[2] + scale[3]) / 2
-        scale[2:] = s2
-        
-        # Don't offset velocity
-        offset[2:] = 0
-        vector = vector - offset
-        vector = vector * scale
-
-        return scale, offset, vector
-    elif (method == 'no_scale'):
+def scaleOrbit(vector, method='no_scale'):
+    if (method == 'no_scale'):
         offset = np.zeros([4])
         scale = 1 / np.max(np.abs(vector - offset), axis=0)
         s1 = (scale[0] + scale[1]) / 2
@@ -54,8 +28,6 @@ def scaleOrbit(vector, method='min-max'):
         vector = vector * scale
 
         return scale, offset, vector
-
-
     elif (method == 'none'):
         return np.ones(4), np.ones(4), vector
     else:
@@ -63,20 +35,10 @@ def scaleOrbit(vector, method='min-max'):
 
 
 def getBenchmark_old(test_X, test_Y, method):
-    if method == 'momentum':
-        constant_momentum = 2 * test_X  - np.roll(test_X, 1,axis=0)
-        baseline_accuracy  = np.mean((test_Y[1:] - constant_momentum[1:,1:])**2, axis = 0)
-        return (baseline_accuracy, constant_momentum)
-    else:
-        raise(Exception("Not implemented"))
+    raise(Exception("Not implemented"))
 
 def getBenchmark(test_X, test_Y, method):
-    if method == 'momentum_mse':
-        constant_momentum = 2 * test_X  - np.roll(test_X, 1,axis=0)
-        baseline_accuracy  = np.mean((test_Y[1:] - constant_momentum[1:])**2, axis = 0)
-        return (baseline_accuracy, constant_momentum)
-    else:
-        raise(Exception("Not implemented"))
+    raise(Exception("Not implemented"))
 
 def get_energy():
     for planet in datasets:
@@ -115,7 +77,7 @@ def get_data(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= Tru
 
 
     # Sample uniformly from each planet
-    minSamples = min(samples)
+    dminSamples = min(samples)
 
     X_all = np.empty((0,4), dtype=np.float32)
     F_all = np.empty((0,4), dtype=np.float32)
