@@ -8,12 +8,23 @@
 \author{Brandon Houghton}
 \begin{document}
 
-We began working on training deep models to find invariants of pendulum motion. Before training could begin we need to develop a data pipeline to simulate pendulum data during training. Maintaining normalized inputs is critical in most deep architectures thus we also include a scaling step that  normalizes the data in such a way as to preserve the relationships of physical quantities. This data pipeline will then be attached to our previously developed training procedure in order to find invariants in the data. We expect to have initial results of training within the next week.
 
-We also worked on fitting linear models of known constants such as the Hamiltonian and angular momentum: 
+This period we completed work on a data pipeline for training models with pendulum simulations. Current implementations allow training deep networks on a fixed or infinite number of simulated pendulum and allow for parallel simulation enabling quick training of new formulations and providing an easy way to produce validation data during training to ensure networks do not over-fit.
 
-$$ \alpha L + \beta \hat H + c = \phi  $$
- Given the size of the dataset, the existing data loading model which stored all parameters in memory, the data no-longer fits on a single GPU. We expect to run this experiment once the new method of sampling training data is implemented and also expect to have this result within the next week.
+We are looking into the practicality of simulating turbulence models while training as done currently with pendulum simulations, however given the complexity of turbulence models we expect that loading the simulated turbulence models will be both faster and more repeatable. 
+
+Initial results - Pendulum: Our first experiments utilized the basic objective learned from previous work  where $ \phi(r_t) $ is a deep network representing a learned invariant over samples from trajectories $r_t$. 
+
+\begin{align}
+\min_{\phi} \sum^{T}_{t = 1} &  
+\left\vert
+\frac{\dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right)}{{\Vert f_t \Vert}^2_2 * {\Vert \bigtriangledown \phi (\pmb{r}_t) \Vert}^2_2}
+\right\vert
+-
+min(\left\Vert \bigtriangledown \phi ( x ) \right\Vert^2_2 - 1 , 0)
+\end{align}
+
+Early analysis shows low training error giving promise that the learned function generalizes well to pendulum. We are working on analyzing the learned networks further in order to better understand what invariant have been learned by the network.
 
 
 

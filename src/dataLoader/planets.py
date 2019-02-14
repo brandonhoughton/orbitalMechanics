@@ -22,10 +22,10 @@ RANDOM_SEED = 42
 # and the next two components representing the first derivative of position
 def scaleOrbit(vector, method='min-max'):
     if (method == 'physical'):
-        # Shift position components
-        offset = np.append(np.mean(vector[0:2,:],axis=1), np.zeros(2))
-        vector = (vector.transpose() - offset).transpose()
-        print (offset)
+        # # Shift position components
+        # offset = np.append(np.mean(vector[0:2,:],axis=1), np.zeros(2))
+        # vector = (vector.transpose() - offset).transpose()
+        # print (offset)
 
         # Scale each component uniformly
         scale = 1/np.max(np.abs(vector))
