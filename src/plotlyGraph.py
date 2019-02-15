@@ -238,12 +238,15 @@ def fit_linear(offset, scale, planetX, planetY, planetvX, planetvY, planetPhi, t
         return (1 / 2) * (vx ** 2 + vy ** 2) - G * m1 / np.sqrt(x ** 2 + y ** 2)
 
     # Angular Momentum
+    # Pretend the mass is the mass of the sun to scale momentum term properly
     def l(x, y, vx, vy):
-        return x * vy - y * vx
+        return m1 * (x * vy - y * vx)
 
     hamiltonian = h(planetX, planetY, planetvX, planetvY)
+    print(hamiltonian)
 
     momentum = l(planetX, planetY, planetvX, planetvY)
+    print(momentum)
 
     indep = np.stack([hamiltonian, momentum], axis=-1).T
 

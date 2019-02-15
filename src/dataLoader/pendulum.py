@@ -1,13 +1,18 @@
+import functools
+
 import numpy as np
 import tensorflow as tf
 from scipy.integrate import odeint
 
+
 def ODE(qp, _):
-    return qp[1],   -np.sin(qp[0])
- 
+    return qp[1], -np.sin(qp[0])
+
+
 def Htrue(q, p):
     return p ** 2 / 2 + (1 - np.cos(q))
- 
+
+
 def simulate(ic, T_values=None, backward=False):
     print(ic.shape, ic)
     print(T_values.shape, T_values)
@@ -36,12 +41,12 @@ class Pend:
     def __iter__(self):
         return self
 
-    def __next__(self): 
+    def __next__(self):
         if self.high is not None and self.current > self.high:
             raise StopIteration
         else:
             self.current += 1
-            time_steps = np.linspace(start = self.step, stop = self.len * self.step, num=self.len)
+            time_steps = np.linspace(start=self.step, stop=self.len * self.step, num=self.len)
             print(len(time_steps))
             return simulate(np.random.uniform(low=-1, high=1, size=2), T_values=time_steps)
 
@@ -63,11 +68,9 @@ class PendSeed:
             return np.array([self.current])
 
     @staticmethod
-    def simulate_seed(elem):
-        seq_len = 500
+    def simulate_seed(seq_len, elem):
         time_steps = np.linspace(start=10, stop=seq_len * 10, num=seq_len)
         return simulate(np.random.uniform(low=-1, high=1, size=2), T_values=time_steps)
-
 
 
 def dat():
@@ -83,24 +86,25 @@ def iterator(sequence_len, batch_size):
         output_types=tf.float32,
         output_shapes=(tf.TensorShape([3, sequence_len, 2])),
         args=[sequence_len]) \
-        .shuffle(2*batch_size) \
+        .shuffle(2 * batch_size) \
         .prefetch(2) \
         .make_one_shot_iterator().get_next()
 
 
 def parallel_iterator(sequence_len, batch_size, num_cpu=8):
+    simFunc = functools.partial(PendSeed.simulate_seed, sequence_len)
     return tf.data.Dataset().from_generator(
         PendSeed,
         output_types=tf.int32,
-        output_shapes=(tf.TensorShape(1))) \
-        .map(PendSeed.simulate_seed, num_parallel_calls=num_cpu) \
-        .interleave(lambda x: tf.data.Dataset.from_tensors(x).repeat(6), cycle_length=batch_size, block_length=2) \
+        output_shapes=(tf.TensorShape([1]))) \
+        .map(simFunc, num_parallel_calls=num_cpu) \
+        .interleave(lambda x: tf.data.Dataset.from_tensors(x).repeat(60), cycle_length=batch_size, block_length=2) \
         .prefetch(batch_size) \
         .make_one_shot_iterator().get_next()
 
 
 # Test dataset
 # this form will make it easy to sample batches of arbitrary sequence length
-# el = iterator(50, 32)
+# el = parallel_iterator(batch_size=32, sequence_len=500)
 # with tf.Session() as sess:
 #     print(sess.run(el[0]))

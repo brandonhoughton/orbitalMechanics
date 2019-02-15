@@ -89,7 +89,7 @@ def get_energy():
             print(planet,data['energy_total'][213])
 
 
-def get_data(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= True):
+def get_data(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle=True):
     """ Read the specified orbit and shape it for regression"""   
 
     samples = []
@@ -154,7 +154,7 @@ def get_data(scaleMethod='min-max', benchmarkMethod='momentum_mse', shuffle= Tru
     return scale, offset, (train_X, test_X, train_F, test_F, train_Y, test_Y), benchmarkResult
 
 
-def get_data_(scaleMethod='no_scale', benchmarkMethod='momentum_mse', shuffle= True):
+def get_data_(scaleMethod='no_scale', benchmarkMethod='momentum_mse', shuffle=True):
     """ Read the specified orbit and shape it for regression"""   
 
     samples = []
@@ -169,8 +169,8 @@ def get_data_(scaleMethod='no_scale', benchmarkMethod='momentum_mse', shuffle= T
             traj = np.array(data['traj'], dtype=np.float32)
             force = np.array(data['F'])
 
-            traj = np.reshape(np.reshape(traj, (-1,1), order='F'),(-1,4))
-            force = np.reshape(np.reshape(force, (-1,1), order='F'),(-1,4))
+            traj = np.reshape(np.reshape(traj, (-1, 1), order='F'), (-1, 4))
+            force = np.reshape(np.reshape(force, (-1, 1), order='F'), (-1, 4))
 
             Xprev = np.roll(traj, shift = 2, axis = 0)[2:]
             X = np.roll(traj, shift = 1, axis = 0)[1:-1]
@@ -220,7 +220,7 @@ def get_data_(scaleMethod='no_scale', benchmarkMethod='momentum_mse', shuffle= T
 
     (train_Xp, test_xp, train_X, test_X, train_F, test_F, train_Y, test_Y) = train_test_split(X_pall, X_all, F_all, Y_all, test_size=0, random_state=RANDOM_SEED, shuffle=shuffle)
 
-    benchmarkResult = getBenchmark(X, Y, method=benchmarkMethod)
+    benchmarkResult = None # getBenchmark(X, Y, method=benchmarkMethod)
 
     return scale, offset, (train_Xp, test_xp, train_X, test_X, train_F, test_F, train_Y, test_Y), benchmarkResult
 
