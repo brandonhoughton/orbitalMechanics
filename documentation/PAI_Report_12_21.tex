@@ -1,0 +1,32 @@
+\documentclass[10pt,letterpaper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{subfig}
+\author{Brandon Houghton}
+\begin{document}
+
+
+This period we completed work on a data pipeline for training models with pendulum simulations. Current implementations allow training deep networks on a fixed or infinite number of simulated pendulum and allow for parallel simulation enabling quick training of new formulations and providing an easy way to produce validation data during training to ensure networks do not over-fit.
+
+We are looking into the practicality of simulating turbulence models while training as done currently with pendulum simulations, however given the complexity of turbulence models we expect that loading the simulated turbulence models will be both faster and more repeatable. 
+
+Initial results - Pendulum: Our first experiments utilized the basic objective learned from previous work  where $ \phi(r_t) $ is a deep network representing a learned invariant over samples from trajectories $r_t$. 
+
+\begin{align}
+\min_{\phi} \sum^{T}_{t = 1} &  
+\left\vert
+\frac{\dot{\pmb{r}_t} \cdot \bigtriangledown \phi \left( \pmb{r}_t \right)}{{\Vert f_t \Vert}^2_2 * {\Vert \bigtriangledown \phi (\pmb{r}_t) \Vert}^2_2}
+\right\vert
+-
+min(\left\Vert \bigtriangledown \phi ( x ) \right\Vert^2_2 - 1 , 0)
+\end{align}
+
+Early analysis shows low training error giving promise that the learned function generalizes well to pendulum. We are working on analyzing the learned networks further in order to better understand what invariant have been learned by the network, as well as creating plot to demonstrate the learned invariant more clearly.
+
+
+
+
+\end{document}
