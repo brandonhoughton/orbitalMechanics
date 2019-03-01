@@ -50,11 +50,11 @@ def trippleLayer(X, outDim = 16):
 
 
 #######################
-train_epoch =    5000000
-display_step =     1000
+train_epoch =   5000000
+display_step =    10000
 summary_step =     2000
 checkpoint_int = 100000
-pre_train_steps  = 1000
+pre_train_steps = 10000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
