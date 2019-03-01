@@ -21,17 +21,17 @@ g = 0.001  # Scale for Phi
 lr = 0.01  # Learning Rate
 #######################
 
-a = np.linspace(0.0001, 0.01, 7)  # 0.00257
-b = np.linspace(0, 0.0000001, 2)  # 1e-7
-g = np.linspace(0.0001, 0.01, 7)  # 0.005
-lr = np.geomspace(1e-5, 1e-2, 6)  # unknown
+a = np.geomspace(0.0001, 0.01, 12)  # 0.00257
+b = np.linspace(0, 0, 1)  # 1e-7
+g = np.geomspace(0.0001, 0.01, 14)  # 0.005
+lr = np.geomspace(1e-4, 1e-2, 12)  # unknown
 
 spaces = [a, b, g, lr]
 ispaces = list(enumerate(spaces))
 hypers = cartesian_product(a, b, g, lr)
 
 seed_freq = 10
-duration = 700001
+duration = 700000
 
 
 history = dict()

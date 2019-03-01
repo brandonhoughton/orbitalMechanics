@@ -57,7 +57,7 @@ def trippleLayer(X, outDim=16, name=False):
 
 #######################
 #             ...xxx...
-train_epoch =   5000000
+train_epoch =  16000000
 display_step =    10000
 summary_step =    10000
 checkpoint_int = 100000
@@ -71,8 +71,16 @@ b = 0.000001  # Prediction Weight
 g = 0.001  # Scale for Phi
 lr = 0.01  # Learning Rate
 #######################
+
+a = 0.0001 # GradNorm Weight
+b = 0.00000 # Prediction Weight
+g = 0.00505  # Scale for Phi
+lr = 0.004  # Learning Rate
+
+
 def make_save_prefix(saveDir, saveType, a, b, g, lr, base_net):
     return J('.', saveDir, 'alpha-' + str(a) + 'beta-' + str(b) + 'gama-' + str(g) + 'lr-' + str(lr) + base_net, saveType)
+
 
 def train_model(a, b, g, lr, train_epoch, saveDir=None):
     #return random.sample(range(777), 5)
@@ -132,7 +140,7 @@ def train_model(a, b, g, lr, train_epoch, saveDir=None):
             dotProd = tf.reduce_sum(
                 tf.multiply(F, gradPhi) / tf.expand_dims(tf.norm(F, axis=1) * tf.norm(gradPhi, axis=1), dim=1), axis=1)
 
-            # Calculate gradient regualization term
+            # Calculate gradient regularization term
         with tf.name_scope('gradMag'):
             gradMag = tf.norm(gradPhi, axis=1)
 
@@ -149,7 +157,6 @@ def train_model(a, b, g, lr, train_epoch, saveDir=None):
             mean = tf.reduce_mean(Phi)
             # phiLoss = tf.square(mean - 0.5) + tf.square(tf.sqrt(tf.reduce_mean(tf.square(Phi - mean))) - 0.08)
             phiLoss = tf.square(mean - 0.5)
-            phiLoss2 = tf.square(mean)
 
         with tf.name_scope('loss'):
             alpha = tf.constant(a, dtype=tf.float32)  # Scaling factor for magnitude of gradient
@@ -166,9 +173,6 @@ def train_model(a, b, g, lr, train_epoch, saveDir=None):
 
         with tf.name_scope('train'):
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
-
-        with tf.name_scope('fix_training'):
-            train2_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(gamma * phiLoss2)
 
         with tf.name_scope('summaries'):
             planet_values = [tf.slice(Phi, [4222 * i, 0], [4222, 1]) for i in range(8)]

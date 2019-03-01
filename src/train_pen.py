@@ -50,17 +50,17 @@ def trippleLayer(X, outDim = 16):
 
 
 #######################
-train_epoch =    5000000
-display_step =     100
+train_epoch =   5000000
+display_step =    10000
 summary_step =     2000
 checkpoint_int = 100000
-pre_train_steps  = 100
+pre_train_steps = 10000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.001  # Learning Rate
+lr = 0.004  # Learning Rate
 #######################
 
 saveDir = os.path.join('experiments', input("Name this run..."))
@@ -74,15 +74,7 @@ def main():
     # Load data onto GPU memory - ensure network layers have GPU support
     # with tf.device('/gpu:0'):
     if True:
-        # # Define GPU constants
-        # X = tf.identity(tf.constant(train_X, dtype= tf.float32))
-        # F = tf.identity(tf.constant(train_F, dtype= tf.float32))
-        # if (b > 0):
-        #     Y = tf.identity(tf.constant(train_Y, dtype= tf.float32))
-
-        # Define graph inputs
-        # sequence = dataLoader.pendulum.iterator(batch_size=32, sequence_len=5000)
-        sequence = dataLoader.pendulum.parallel_iterator(batch_size=32, sequence_len=5000)
+        sequence = dataLoader.pendulum.parallel_iterator(batch_size=128, sequence_len=5000)
 
         ic = sequence[0]
         X = sequence[1]
@@ -158,16 +150,8 @@ def main():
         with tf.name_scope('train'):
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(loss)
 
-        # with tf.name_scope('summaries'):
-        #     planet_values = [tf.slice(Phi, [4222 * i, 0], [4222, 1]) for i in range(8)]
-        #     means = [tf.reduce_mean(planetPhi) for planetPhi in planet_values]
-        #     stratified_var = reduce(lambda x,y: (x + y) / 2, [tf.sqrt(tf.reduce_mean(tf.square(var - mean))) for (var, mean) in zip(planet_values, means)])
-
     # Create summary statistics outside of GPU scope
     variable_summaries(Phi, "PhiSummary")
-    # tf.summary.scalar("PhiByPlanetVar", stratified_var,)
-
-    # variable_summaries(Pred, "Prediction")
     variable_summaries(gradPhi, "GradPhi")
     variable_summaries(dotProd, "DotProduct")
     variable_summaries(gradMag, "GradMagnitude")
@@ -179,12 +163,6 @@ def main():
 
     # Collect summary stats for train variables
     merged = tf.summary.merge_all()
-
-    # Create list of merged summaries to visualize together on a single graph
-    # summary_lables = ['earth', 'jupiter', 'mars', 'mercury', 'neptune', 'saturn', 'uranus', 'venus']
-    # summary_lables = [saveDir + '/train/' + planet for planet in summary_lables]
-    # with tf.name_scope('planets'):
-    # summary_list = [tf.summary.merge(variable_summaries_list(planet_val, summary_label)) for (planet_val, summary_label) in zip(planet_values, summary_lables)]
 
     # Create checkpoint saver
     saver = tf.train.Saver()

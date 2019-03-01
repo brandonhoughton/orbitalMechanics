@@ -63,6 +63,7 @@ g = 0.001  # Scale for Phi
 lr = 0.01  # Learning Rate
 #######################
 
+
 saveDir = input("Name this run...")
 
 
