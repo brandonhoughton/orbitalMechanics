@@ -264,7 +264,7 @@ def train_model(a, b, g, lr, train_epoch, saveDir=None):
                     print(loss_, epoch)
 
                 if epoch % checkpoint_int == 0 and saveDir is not None:
-                    saver.save(sess, save_path=make_save_prefix(saveDir, 'network', a, b, g, lr, base_net_type))
+                    saver.save(sess, save_path=make_save_prefix(saveDir, 'network', a, b, g, lr, base_net_type)+str(epoch))
 
                 # if epoch % viz_step == 0:
                 #     phi = sess.run([Phi],feed_dict=viz_dic)

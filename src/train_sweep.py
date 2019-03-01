@@ -31,7 +31,7 @@ ispaces = list(enumerate(spaces))
 hypers = cartesian_product(a, b, g, lr)
 
 seed_freq = 10
-duration = 700000
+duration = 1700000
 
 
 history = dict()
@@ -76,7 +76,8 @@ folder_info['sweep_number'] += 1
 with open(filename, 'w') as f:
     json.dump(folder_info, f)
 
-best_params = [0.00257, 1e-7, 0.005, 0.001]
+best_params = [0.006579, 0, 0.0012, 0.006]
+
 best_ratio, best_perf = train_model(best_params[0], best_params[1], best_params[2], best_params[3], duration,
                                     "sweep_" + str(sweep_number))
 history[params_to_string(best_params)] = (best_perf, best_ratio)

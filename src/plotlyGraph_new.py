@@ -75,7 +75,7 @@ colorscale = [
 def phi(sess, x, y, u, v):
     viz_dic = {'X:0': np.array([x, y, u, v]).T}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
-    return sess.run(op, feed_dict=viz_dic)
+    return sess.run([op], feed_dict=viz_dic)[0]
 
 
 # def phi_(sess, x, y, u, v, xp, yp, up, vp):
@@ -85,11 +85,11 @@ def phi(sess, x, y, u, v):
 #     return sess.run(op, feed_dict=viz_dic)
 #
 
-def phi2(sess, X):
-    viz_dic = {'X:0':np.array(X)}
+def phi2(sess, X, Xp):
+    viz_dic = {'X:0':np.array(X), 'Xp:0':np.array(Xp)}
     op = sess.graph.get_tensor_by_name('Phi/dense/Sigmoid:0')
     #op = sess.graph.get_tensor_by_name('pred_loss/dense/Sigmoid:0')
-    return sess.run(op, feed_dict=viz_dic)
+    return sess.run([op], feed_dict=viz_dic)[0]
 
 
 def getMeshGrid(n):
@@ -136,59 +136,43 @@ def f(sess, scale, offset, targetOrbit=None):
     #return (x, y, np.squeeze(z))
 
 def f2(offset, scale, planetID, planetX, planetY, planetvX, planetvY, planetPhi, targetOrbit = None):
-    planetID = np.reshape(planetID, (None))
-    planetX = np.reshape(planetX, (None))
-    planetY = np.reshape(planetY, (None))
-    planetvX = np.reshape(planetvX, (None))
-    planetvY = np.reshape(planetvY, (None))
+    planetX = np.reshape(planetX, (None)) #* (scale[0])
+    planetY = np.reshape(planetY, (None)) #* (scale[1])
+    planetvX = np.reshape(planetvX, (None)) #* (scale[2])
+    planetvY = np.reshape(planetvY, (None)) #* (scale[3])
 
     planetPhi = np.reshape(planetPhi, (None))
 
-    #Check velocity
-    # stack = np.stack([planetX, planetY, planetvX, planetvY], axis=1)[45:50]
-
-    # u_hat, v_hat = getVelocity(scale, offset, stack[0,:], stack[1,:])
-    # print(stack[0,:], u_hat, ", ", stack[1,:], v_hat)
-
     m1 = physicsUtils.mass_sun
-    m2 = np.array([physicsUtils.mass[id] for id in planet_ID])
-
-    # Fit 1/r function
-    planetR = np.sqrt(planetX ** 2 + planetY ** 2)
-    def hyper(r, A, B):
-        return 1/(A*r) + B
 
     # Hamiltonian
     def h(x, y, vx, vy):
         return (1 / 2) * (vx ** 2 + vy ** 2) - G * m1 / np.sqrt(x ** 2 + y ** 2)
 
     # Angular Momentum
+    # Pretend the mass is the mass of the sun to scale momentum term properly
     def l(x, y, vx, vy):
-        return x * vy - y * vx
+        return m1 * (x * vy - y * vx)
 
-    hamiltonian = h(planetX / scale[0] + offset[0],
-                    planetY / scale[1] + offset[1],
-                    planetvX / scale[2] + offset[2],
-                    planetvY / scale[3] + offset[3])
+    hamiltonian = h(planetX, planetY, planetvX, planetvY)
+    print(hamiltonian)
 
-    momentum = l(planetX / scale[0] + offset[0],
-                 planetY / scale[1] + offset[1],
-                 planetvX / scale[2] + offset[2],
-                 planetvY / scale[3] + offset[3])
+    momentum = l(planetX, planetY, planetvX, planetvY)
+    print(momentum)
 
     indep = np.stack([hamiltonian, momentum], axis=-1).T
 
-    def linear(x, a, b, c, d, e):
-        return a + b*(x[0]+d) + c*(x[1]+e)
+    def linear(x, a, b, c):
+        return a + b * x[0] + c * x[1]
 
     popt, pconv = curve_fit(linear, indep, planetPhi)
 
-    print("a + bx + cy:", popt)
+    print("\ta + bx + cy:", popt)
     # print("Covariance: ", pconv)
     # print("Avg: ", sum(pconv)/len(pconv))
 
     # RMS
-    phi_est = linear(indep, popt[0], popt[1], popt[2], popt[3], popt[4])
+    phi_est = linear(indep, popt[0], popt[1], popt[2])
     sqr_err = np.square(phi_est - planets_phi)
     print('RMS: ', np.sqrt(np.mean(sqr_err)))
 
@@ -199,38 +183,39 @@ def f2(offset, scale, planetID, planetX, planetY, planetvX, planetvY, planetPhi,
         print(planets[p], 'RMS', np.sqrt(np.mean(sqr_err[p*step:p*step + step])))
 
 
-    n = 200
-
-    if targetOrbit is not None and targetOrbit != 'none':
-        radius = physicsUtils.radius[targetOrbit]
-    else:
-        radius = None
-
-    # Setup surface plot
-    x, y = getMeshGrid(n)
-    u, v = getVelocity(scale, offset, x / scale[0] + offset[0], y / scale[1] + offset[0], semimajorAxis=radius)
-
-    # if (targetOrbit is None):
-    #     avg_m1 = sum(physicsUtils.mass.values())/len(physicsUtils.mass)
+    # n = 200
+    #
+    # if targetOrbit is not None and targetOrbit != 'none':
+    #     radius = physicsUtils.radius[targetOrbit]
     # else:
-    #     avg_m1 = physicsUtils.mass[targetOrbit]
-    hamiltonian = h(x, y, u, v)
-
-    momentum = l(x, y, u, v)
-
-    indep_grid = np.stack([hamiltonian, momentum], axis=-1).T
+    #     radius = None
+    #
+    # # Setup surface plot
+    # x, y = getMeshGrid(n)
+    # u, v = getVelocity(scale, offset, x / scale[0] + offset[0], y / scale[1] + offset[0], semimajorAxis=radius)
+    #
+    # # if (targetOrbit is None):
+    # #     avg_m1 = sum(physicsUtils.mass.values())/len(physicsUtils.mass)
+    # # else:
+    # #     avg_m1 = physicsUtils.mass[targetOrbit]
+    # hamiltonian = h(x, y, u, v)
+    #
+    # momentum = l(x, y, u, v)
+    #
+    # indep_grid = np.stack([hamiltonian, momentum], axis=-1).T
 
     #r = np.sqrt(x ** 2 + y ** 2)
 
     # Calculate z
     # z = linear(indep_grid, popt[0], popt[1], popt[2]).T
-    z = linear(indep, popt[0], popt[1], popt[2], popt[3], popt[4]).T
+    # z = linear(indep, popt[0], popt[1], popt[2]).T
+        # z = phi_est
 
     # Don't messup autoscaling
     # z[z > 0.8] = np.nan
 
     # return (np.reshape(x,(n,n)),np.reshape(y,(n,n)), np.reshape(z,(n,n)))
-    return (planetX / scale[0] + offset[0], planetY / scale[1] + offset[1], np.reshape(z, (None)))
+    return planetX, planetY, phi_est
 
 
 
@@ -239,13 +224,14 @@ def f2(offset, scale, planetID, planetX, planetY, planetvX, planetvY, planetPhi,
 with tf.Session(graph=tf.Graph()) as sess:
 
     # Load the trained model
-    new_saver = tf.train.import_meta_graph('network/300000.meta')
-    new_saver.restore(sess, 'network/300000')
+    new_saver = tf.train.import_meta_graph('network/network.meta')
+    new_saver.restore(sess, 'network/network')
 
 
     # Load planets and scale values
     # scale, offset, (train_x, _, _, _, _, _), benchmark = get_data(shuffle=False, scaleMethod='no_scale')
-    scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
+    scale, offset, (train_Xp, _, train_X, _, train_F, _, train_Y, _), benchmark = get_data_(shuffle=False)
+    # scale, offset, (train_X, _, _, _, _, _), benchmark = get_data(shuffle=False)
     #scale, offset, (train_Xp, _, train_X, _, _, _, _, _), benchmark = get_data_(shuffle=False)
 
     # For each planet, plot the values to an interactive <planet>.html
@@ -316,10 +302,10 @@ with tf.Session(graph=tf.Graph()) as sess:
     
     
         # Add planet trajectories
-        planets_phi = phi2(sess, train_X)
+        planets_phi = phi2(sess, train_X, train_Xp)
         planetTraces = []
         step = int(train_X.shape[0]/8)
-        X = train_X / scale + offset
+        X = train_X #/ scale #+ offset
         rad = np.sqrt(X[:, 0] ** 2 + X[:, 1] ** 2)
 
         print(step)
@@ -357,14 +343,14 @@ with tf.Session(graph=tf.Graph()) as sess:
         #planet_ID = np.repeat(range(8), step)
         planet_ID = list(itertools.chain.from_iterable(itertools.repeat(x, step) for x in planets[:-1]))
 
-        x, y, z = f2(offset, scale, planet_ID, train_X[:, 0], train_X[:, 1], train_X[:, 2], train_X[:, 3], phi2(sess, train_X).ravel(), planet)
+        x, y, z = f2(offset, scale, planet_ID, train_X[:, 0], train_X[:, 1], train_X[:, 2], train_X[:, 3], phi2(sess, train_X, train_Xp).ravel(), planet)
         # curveFit = go.Surface(x=x,  # Passing x and y with z, gives the correct axis scaling/values
         #                     y=y,
         #                     z=z,
         #                     showscale=False,  # This turns off the scale colormap on the side - don't think we need it
         #                     opacity=0.9)
         curveFit = go.Scatter(
-            x=np.sqrt(x ** 2 + y ** 2).ravel(), # Passing x and y with z, gives the correct axis scaling/values
+            x=np.sqrt(x ** 2 + y ** 2).ravel(),  # Passing x and y with z, gives the correct axis scaling/values
             y=z,
             # x=np.log(np.sqrt(x ** 2 + y ** 2)).ravel(),  # Passing x and y with z, gives the correct axis scaling/values
             # y=np.log(z),

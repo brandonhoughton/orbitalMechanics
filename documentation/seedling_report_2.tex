@@ -1,4 +1,4 @@
- 	\documentclass[10pt,letterpaper]{report}
+\documentclass[10pt,letterpaper]{report}
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
 \usepackage{amsfonts}
@@ -8,31 +8,32 @@
 \author{Brandon Houghton}
 \begin{document}
 	
-	Work Completed:
 	
-	This period we worked on training models on the pendulum and turbulence data, as well as integrating our linear model of known energies to inform a hyper-parameter sweep. 
-	Preliminary results on pendulum models shows good network performance showing that the network is able to learn a non trivial invariant over simulated pendulum. These learned invariants will then be compared against functions of known pendulum energies to determine if the learned invariant is a linear function of known invariants. 
-	Turbulence data has been adapted for loading into deep models. Available data did not come packaged with a time derivative term thus this term is calculated using finite differences over two points. This is assumed to be accurate enough for training, however if issues arise with learned invariants, efforts will be made to calculate the numeric derivative of charge over time more precisely.
-	Orbital hyper-parameter sweeps have returned mostly negative results with the learned linear functions having zero co-efficients for terms related to known invariants. This implies that the distribution of the learned invariant over these models is not a linear combination of known invariants which contradicts previous results. This is easily explained by a bad hyper-parameter space, or an overly complex network. Additional hyper-parameter sweeps are being conducted to discover a better hyper-parameter space that recovers invariants more closely related to the hamiltonian and angular momentum of orbital bodies.
+	In this period we explored the effect of various objective coefficients on training networks to predict orbital trajectories. We discovered potential candidate parameters, noting many initialization conditions found a non-trivial invariant with increasing explainability via a linear model of know parameters as training progressed. 
+	
+	Some variance remained unexplained by this method of approximating phi as a linear combination of known invariants, however, given the small coefficients in the linear model small errors in floating point accuracy can cause large shifts. In general across the sweep the ratio of explained variance showed good linear fit among reasonable parameters (those for which the gradients did not diverge). 
+	
+	Overall we have developed a framework that is capable of loading in data from physical sources and training a network that is capable of learning non-trivial functions of the dynamics of the system. These learned networks have shown to be intimately tied to known physical invariants. We have also demonstrated the ability for such networks to predict future trajectories enabling the network to embed the dynamics of a system within its activations. A network diagram is shown below in figure \ref{graph}. The tree input nodes are ellipses marked X, Xp, and F representing the state, previous state (used for predicting system dynamics if enabled), and the gradient of the current state respectively.
 	
 	
 	
-
-
-
-\begin{figure}
-	\centering
-	\includegraphics[width=0.3\linewidth]{./images/turb_sample_1}
-	\includegraphics[width=0.3\linewidth]{./images/turb_sample_2} \\ 
-	\includegraphics[width=0.3\linewidth]{./images/turb_sample_3}
-	\includegraphics[width=0.3\linewidth]{./images/turb_sample_4}
-	\caption{Samples at t=0 of sections of turbulence data}
-	\label{fig:turbsamps}
-\end{figure}
-
-
-
-
-
-
+	\begin{figure}
+		\begin{center}
+			\includegraphics[width=0.7\textwidth]{images/ratio_RMS_to_var.PNG}
+			\caption{\small RMS error between learned phi and best linear fit normalized by the variance of phi. The best sample achieved a ratio of  0.98 demonstrating nearly all of the variance was explained by known invariants. }
+		\end{center}	
+	\end{figure}
+	
+	
+	
+	
+	\begin{figure}
+		\begin{center}
+			\includegraphics[width=0.99\textwidth]{images/graphArch.png}
+			\caption{\small Illustration of network used to learn invariants in physical systems. A single dense layer is used for the base network and a fully connected layer joins the output of the base network with the single network output Phi, representing the learned invariant.}
+			\label{graph}
+		\end{center}	
+	\end{figure}
+	
+	
 \end{document}

@@ -250,17 +250,19 @@ def fit_linear(offset, scale, planetX, planetY, planetvX, planetvY, planetPhi, t
 
     indep = np.stack([hamiltonian, momentum], axis=-1).T
 
-    def liniar(x, a, b, c):
+    def linear(x, a, b, c):
         return a + b * x[0] + c * x[1]
 
-    popt, pconv = curve_fit(liniar, indep, planetPhi)
+
+
+    popt, pconv = curve_fit(linear, indep, planetPhi)
 
     print("\ta + bx + cy:", popt)
     # print("Covariance: ", pconv)
     # print("Avg: ", sum(pconv)/len(pconv))
 
     # RMS
-    phi_est = liniar(indep, popt[0], popt[1], popt[2])
+    phi_est = linear(indep, popt[0], popt[1], popt[2])
     sqr_err = np.square(phi_est - planetPhi)
     rms = np.sqrt(np.mean(sqr_err))
 
