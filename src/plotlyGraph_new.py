@@ -242,7 +242,7 @@ with tf.Session(graph=tf.Graph()) as sess:
             continue
         else:
             w0 = None
-        delta_w = 0.00001
+        delta_w = 0.00001   
 
         # x, y, z = f(sess, scale, offset, targetOrbit=planet)
         #
