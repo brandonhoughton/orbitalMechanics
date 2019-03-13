@@ -54,15 +54,6 @@ def get_tensors(sess):
     pfunc = pendulum(1)
     tint, state_tensor, dynamic_tensor = RK4(pfunc, initial_ph, 5, h=0.1)
 
-
-    # conds = np.concatenate(
-    #     [np.random.uniform(-np.pi, np.pi, (1000, 2)),
-    #      np.zeros(1000)[:, np.newaxis]], axis=-1)
-
-    # state, dynamic = sess.run([state_tensor, dynamic_tensor],
-    #                           feed_dict={
-    #                               initial_ph: conds})
-
     return initial_ph, state_tensor, dynamic_tensor
 
 
@@ -70,6 +61,7 @@ def get_init(batch_size):
     return np.stack(
         [np.random.uniform(-np.pi, np.pi, (batch_size)),
          np.zeros(batch_size)], axis=-1)
+
 
 def test():
     sess = tf.InteractiveSession()
