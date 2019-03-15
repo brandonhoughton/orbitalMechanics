@@ -31,8 +31,8 @@ def trippleLayer(X, outDim = 16):
 
 #######################
 train_batch =   50000000
-summary_step =    10000
-validation_step = 50000
+summary_step =    100000
+validation_step = 200000
 checkpoint_int = 50000000
 pre_train_steps = -100
 #######################
@@ -40,7 +40,7 @@ use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.008  # Learning Rate
+lr = 0.08  # Learning Rate
 #######################
 
 # saveDir = os.path.join('experiments', input("Name this run..."))
@@ -54,8 +54,8 @@ def main():
 
     # Load data onto GPU memory - ensure network layers have GPU support
     with tf.Session() as sess:
-        if True:
-        # with tf.device('/gpu:0'):
+        # if True:
+        with tf.device('/cpu:0'):
 
             # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
             data = tf.constant(dtype=tf.float32, value=loader.get_data())

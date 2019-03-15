@@ -98,7 +98,7 @@ class Turbulence():
         regions = np.apply_along_axis(
                     lambda location: make_rectangles(location, self.input_size), -1, locations)
         print(regions[0])
-        regions = tf.data.Dataset().from_tensor_slices(regions)
+        regions = tf.data.Dataset.from_tensor_slices(regions)
                 
 
         # Make regions out of points
