@@ -66,9 +66,9 @@ def make_iterator(dataset, num_windows, batch_size):
             .get_next()
 
 def make_rectangles(location, window_size):
-    new_location = location
+    new_location = location.copy()
     new_location[-1] += window_size[-1]
-    label_size = window_size
+    label_size = window_size.copy()
     label_size[-1] = 1
     return np.stack([location, window_size, new_location, label_size])
 
@@ -76,7 +76,7 @@ def make_rectangles(location, window_size):
 # Sequence to frame model
 class Turbulence():
 
-    def __init__(self, batch_size=32, window_size=[50, 50, 21], num_windows=500, num_test=100):
+    def __init__(self, batch_size=32, window_size=[50, 50, 21], num_windows=50000, num_test=100):
         self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))        
         shape = self.data['U_t'].shape
 
@@ -84,11 +84,20 @@ class Turbulence():
         low = [0 for _ in shape]
         high = [x - size for (x, size) in zip(shape, window_size)]
 
+        self.input_size = window_size.copy()
+        self.input_size[-1] -= 1
+        self.test_size = [-1]
+        self.test_size.extend(self.input_size.copy())
+        self.test_size[-1] = 1
+        self.num_out = 1
+        for d in self.test_size:
+            self.num_out *= abs(d)
+
         np.random.seed(RANDOM_SEED)
         locations = np.random.uniform(low, high, size=(num_windows, len(high))).astype(np.int32)
         regions = np.apply_along_axis(
-                    lambda location: make_rectangles(location, window_size), -1, locations)
-        print(regions)
+                    lambda location: make_rectangles(location, self.input_size), -1, locations)
+        print(regions[0])
         regions = tf.data.Dataset().from_tensor_slices(regions)
                 
 
@@ -126,18 +135,20 @@ class Turbulence():
     # returns the entire time section of the region
     def slice_input(data : tf.Tensor, region):
         # X - input, slice at region (sequence)
-        return  tf.slice(data, region[0], region[1])
+        # return  tf.slice(data, region[0], region[1])
+        return  tf.slice(data, region[0], [50, 50, 20])
 
     @staticmethod
     def slice_label(data : tf.Tensor, region):
         # Y - result, slice of region at single timestep                 
-        return tf.slice(data,  region[2], region[3])
+        # return tf.slice(data,  region[2], region[3])
+        return tf.slice(data,  region[2], [50, 50, 1])
 
     @staticmethod
     def map_regions(data : tf.Tensor, regions):
         return \
-            tf.map_fn(lambda region: Turbulence.slice_input(data, region), regions, infer_shape=True), \
-            tf.map_fn(lambda region: Turbulence.slice_label(data, region), regions, infer_shape=True)
+            tf.map_fn(lambda region: Turbulence.slice_input(data, region), regions, dtype=tf.float32), \
+            tf.map_fn(lambda region: Turbulence.slice_label(data, region), regions, dtype=tf.float32    )
 
     def get_data(self):
         return self.data['U_t']
