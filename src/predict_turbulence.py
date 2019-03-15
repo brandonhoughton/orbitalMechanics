@@ -55,7 +55,7 @@ def main():
     # Load data onto GPU memory - ensure network layers have GPU support
     with tf.Session() as sess:
         #if True:
-        with tf.device('/cpu:0'):
+        with tf.device('/gpu:0'):
 
             # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
             data = tf.constant(dtype=tf.float32, value=loader.get_data())
