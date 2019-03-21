@@ -13,7 +13,8 @@ def singleLayer(X, outDim = 50):
     # Hidden layers
     head = tf.layers.flatten(X)
     head = tf.layers.dropout(head)
-    head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, use_bias=True)
+    # head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, use_bias=True)
+    head = tf.layers.dense(head, outDim, activation=None, use_bias=True)
     return head
 
 def singleConvolution(X, numFilters = 5, filterSize=10, stride=5):
@@ -30,17 +31,17 @@ def trippleLayer(X, outDim = 16):
 
 
 #######################
-train_batch =   50000000
-summary_step =    100000
-validation_step = 200000
-checkpoint_int = 50000000
+train_batch =   250000000
+summary_step =    500000
+validation_step = 500000
+checkpoint_int = 5000000000
 pre_train_steps = -100
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.08  # Learning Rate
+lr = 0.0095  # Learning Rate
 #######################
 
 # saveDir = os.path.join('experiments', input("Name this run..."))
@@ -90,7 +91,9 @@ def main():
 
         tf.summary.image('Predicted', Pred)
         tf.summary.image('Label', Y)
+        tf.summary.image('Error', Pred - Y)
         tf.summary.scalar("PredictiveLoss", predLoss)
+        tf.summary.histogram("error", Pred - Y)
 
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
@@ -104,10 +107,10 @@ def main():
 
         # Setup tensorboard logging directories
         train_writer = tf.summary.FileWriter(
-            J('.', saveDir, 'turbulence_lr' + str(lr)), sess.graph)
+            J('.', saveDir, 'turbulence_lr' + str(lr), 'test'), sess.graph)
 
         test_writer = tf.summary.FileWriter(
-            J('.', saveDir, 'turbulence_lr' + str(lr)), sess.graph)
+            J('.', saveDir, 'turbulence_lr' + str(lr), 'validation'), sess.graph)
 
         # Train model
         for batch in range(train_batch + 1):
