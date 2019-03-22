@@ -9,6 +9,12 @@
 \begin{document}
 
 
+In this period we developed deep networks capable of predicting turbulence over a 2D  flow generated in a shallow electrolyte layer. These networks predict the  well using only a single convolution over the history to reduce the latent embedding to 125 variables (5 features over 5x5 grid) see \ref{fig:setup} for more information. Additionally we see that the prediction error is not strongly correlated with the edge of the image patch, which we would observe if the network was simply using local features. This suggests that the network has learned some embedding for the entire turbulence trajectory
+
+
+
+
+
 In this period we explored the effect of various objective coefficients on training networks to predict orbital trajectories. We discovered potential candidate parameters, noting many initialization conditions found a non-trivial invariant with increasing explainability via a linear model of know parameters as training progressed. 
 
 Some variance remained unexplained by this method of approximating phi as a linear combination of known invariants, however, given the small coefficients in the linear model small errors in floating point accuracy can cause large shifts. In general across the sweep the ratio of explained variance showed good linear fit among reasonable parameters (those for which the gradients did not diverge). 
@@ -21,6 +27,7 @@ Overall we have developed a framework that is capable of loading in data from ph
 	\begin{center}
 		\includegraphics[width=0.7\textwidth]{images/ratio_RMS_to_var.PNG}
 		\caption{\small RMS error between learned phi and best linear fit normalized by the variance of phi. The best sample achieved a ratio of  0.98 demonstrating nearly all of the variance was explained by known invariants. }
+		\label{setup}
 	\end{center}	
 \end{figure}
 
@@ -29,9 +36,9 @@ Overall we have developed a framework that is capable of loading in data from ph
 
 \begin{figure}
 	\begin{center}
-		\includegraphics[width=0.79\textwidth]{images/graphArch.png}
+		\includegraphics[width=0.79\textwidth]{images/mean_turb_error.png}
 		\caption{\small Illustration of network used to learn invariants in physical systems. A single dense layer is used for the base network and a fully connected layer joins the output of the base network with the single network output Phi, representing the learned invariant.}
-		\label{graph}
+		\label{mean_error}
 	\end{center}	
 \end{figure}
 
