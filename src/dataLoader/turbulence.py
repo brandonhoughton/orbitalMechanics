@@ -17,7 +17,7 @@ from sklearn.model_selection import train_test_split
 
 J = os.path.join
 E = os.path.exists
-dataDir = J('src','data')
+dataDir = J('data','turbulence')
 datasets = [
     'velocity_and_vorticity_field.mat',
     'velocity_and_vorticity_field_1200s.mat']
@@ -65,6 +65,12 @@ def make_iterator(dataset, num_windows, batch_size):
             .make_one_shot_iterator() \
             .get_next()
 
+def make_iterator_no_shuffle(dataset, num_windows, batch_size):
+    return dataset.batch(batch_size) \
+            .prefetch(1) \
+            .make_one_shot_iterator() \
+            .get_next()
+
 def make_rectangles(location, window_size):
     new_location = location.copy()
     new_location[-1] += window_size[-1]
@@ -76,9 +82,11 @@ def make_rectangles(location, window_size):
 # Sequence to frame model
 class Turbulence():
 
-    def __init__(self, batch_size=32, window_size=[50, 50, 21], num_windows=50000, num_test=100):
-        self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))        
-        shape = self.data['U_t'].shape
+    def __init__(self, batch_size=64, window_size=[50, 50, 21], num_windows=100000, num_test=100):
+        # For small memory machines - just load the needed array rather than the whole .mat file
+        # self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
+        self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
+        shape = self.data.shape
 
         # Define sub-sets of turbulent data
         low = [0 for _ in shape]
@@ -90,6 +98,7 @@ class Turbulence():
         self.test_size.extend(self.input_size.copy())
         self.test_size[-1] = 1
         self.num_out = 1
+        self.num_test = num_test
         for d in self.test_size:
             self.num_out *= abs(d)
 
@@ -109,7 +118,7 @@ class Turbulence():
         test_regions = regions.take(num_test).repeat()
         train_regions = regions.skip(num_test).repeat()
 
-        self.get_test_region_batch = make_iterator(test_regions, num_windows, batch_size)
+        self.get_test_region_batch = make_iterator_no_shuffle(test_regions, num_windows, num_test)
         self.get_train_region_batch = make_iterator(train_regions, num_windows, batch_size)
 
         self.inputs = {
@@ -136,7 +145,7 @@ class Turbulence():
     def slice_input(data : tf.Tensor, region):
         # X - input, slice at region (sequence)
         # return  tf.slice(data, region[0], region[1])
-        return  tf.slice(data, region[0], [50, 50, 20])
+        return tf.slice(data, region[0], [50, 50, 10])
 
     @staticmethod
     def slice_label(data : tf.Tensor, region):
@@ -151,7 +160,8 @@ class Turbulence():
             tf.map_fn(lambda region: Turbulence.slice_label(data, region), regions, dtype=tf.float32    )
 
     def get_data(self):
-        return self.data['U_t']
+        return self.data
+        # return self.data['U_t']
 
     def get_train_regions(self, session):
         session.run(self.get_train_region_batch)
