@@ -31,7 +31,7 @@ def trippleLayer(X, outDim = 16):
 
 
 #######################
-train_batch =   500000000
+train_batch =   1000000000
 summary_step =    1000000
 validation_step = 5000000
 checkpoint_int = 500000000
@@ -41,7 +41,7 @@ use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.00201  # Learning Rate
+lr = 0.00404  # Learning Rate
 #######################
 
 # saveDir = os.path.join('experiments', input("Name this run..."))
@@ -72,9 +72,9 @@ def main():
 
             # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
             data = tf.constant(dtype=tf.float32, value=loader.get_data())
-
             X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
-            Y = tf.map_fn(lambda region: tf.slice(data, region[2], [50, 50, 1]), regions, dtype=tf.float32)
+            size = [loader.shape[0], loader.shape[1], 1]
+            Y = tf.map_fn(lambda region: tf.slice(data, region[2], size), regions, dtype=tf.float32)
 
         print(X.shape)
         # print_op = tf.Print(X,[X])
@@ -85,7 +85,9 @@ def main():
 
         predNetwork = baseNetwork
         with tf.name_scope('Prediction'):
-            outDim = loader.test_size
+
+            outDim = [-1]
+            outDim.extend(size)
             num_out = loader.num_out
             Pred = singleLayer(predNetwork, outDim=num_out)
             Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
@@ -108,7 +110,7 @@ def main():
             tf.summary.image('Predicted', Pred, max_outputs=5),
             tf.summary.image('Label', Y, max_outputs=5),
             tf.summary.image('Error', Pred - Y, max_outputs=5),
-            tf.summary.image('Mean Error', tf.expand_dims(tf.reduce_mean(Pred - Y, axis=0), axis=0), max_outputs=1)]
+            tf.summary.image('Mean Error', tf.expand_dims(tf.reduce_mean(abs(Pred - Y), axis=0), axis=0), max_outputs=1)]
 
         # Create checkpoint saver
         saver = tf.train.Saver()
@@ -119,7 +121,7 @@ def main():
 
         # Setup tensorboard logging directories
         train_writer = tf.summary.FileWriter(
-            J('.', saveDir, 'turbulence_lr' + str(lr), 'test'), sess.graph)
+            J('.', saveDir, 'turbulence_lr' + str(lr), 'train'), sess.graph)
 
         test_writer = tf.summary.FileWriter(
             J('.', saveDir, 'turbulence_lr' + str(lr), 'validation'), sess.graph)

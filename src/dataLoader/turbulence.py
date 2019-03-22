@@ -73,6 +73,11 @@ def make_iterator_no_shuffle(dataset, num_windows, batch_size):
 
 def make_rectangles(location, window_size):
     new_location = location.copy()
+
+    # Make label entire image
+    new_location[0] = 0
+    new_location[1] = 0
+
     new_location[-1] += window_size[-1]
     label_size = window_size.copy()
     label_size[-1] = 1
@@ -82,15 +87,16 @@ def make_rectangles(location, window_size):
 # Sequence to frame model
 class Turbulence():
 
-    def __init__(self, batch_size=64, window_size=[50, 50, 21], num_windows=100000, num_test=100):
+    def __init__(self, batch_size=64, window_size=[50, 50, 21], num_windows=10000, num_test=200):
         # For small memory machines - just load the needed array rather than the whole .mat file
         # self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
         self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
-        shape = self.data.shape
+        self.shape = self.data.shape
+        print(self.shape)
 
         # Define sub-sets of turbulent data
-        low = [0 for _ in shape]
-        high = [x - size for (x, size) in zip(shape, window_size)]
+        low = [0 for _ in self.shape]
+        high = [x - size for (x, size) in zip(self.shape, window_size)]
 
         self.input_size = window_size.copy()
         self.input_size[-1] -= 1
@@ -99,8 +105,14 @@ class Turbulence():
         self.test_size[-1] = 1
         self.num_out = 1
         self.num_test = num_test
-        for d in self.test_size:
+
+        # predict patch
+        # for d in self.test_size:
+        #     self.num_out *= abs(d)
+        # predict entire img
+        for d in self.shape[:-1]:
             self.num_out *= abs(d)
+        print(self.num_out)
 
         np.random.seed(RANDOM_SEED)
         locations = np.random.uniform(low, high, size=(num_windows, len(high))).astype(np.int32)
@@ -157,7 +169,7 @@ class Turbulence():
     def map_regions(data : tf.Tensor, regions):
         return \
             tf.map_fn(lambda region: Turbulence.slice_input(data, region), regions, dtype=tf.float32), \
-            tf.map_fn(lambda region: Turbulence.slice_label(data, region), regions, dtype=tf.float32    )
+            tf.map_fn(lambda region: Turbulence.slice_label(data, region), regions, dtype=tf.float32)
 
     def get_data(self):
         return self.data
