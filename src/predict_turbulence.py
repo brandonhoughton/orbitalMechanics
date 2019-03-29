@@ -17,17 +17,39 @@ def singleLayer(X, outDim = 50):
     head = tf.layers.dense(head, outDim, activation=None, use_bias=True)
     return head
 
+
 def singleConvolution(X, numFilters = 5, filterSize=10, stride=5):
     # Hidden layers
     head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same")
     return head
 
+
 def trippleLayer(X, outDim = 16):
-    head = tf.layers.dense(X, 64, activation=tf.nn.sigmoid, name="dense_1", use_bias=True)
-    head = tf.layers.dense(head, 24, activation=tf.nn.sigmoid, name="dense_2", use_bias=True)
-    head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, name="dense_3", use_bias=True)
+    head = tf.layers.flatten(X)
+    head = tf.layers.dense(head, 64, activation=tf.nn.sigmoid, name="dense_1", use_bias=True)
     head = tf.layers.dropout(head)
+    head = tf.layers.dense(head, 12, activation=tf.nn.sigmoid, name="dense_2", use_bias=True)
+    head = tf.layers.dense(head, outDim, activation=None, name="dense_3", use_bias=True)
     return head
+
+def multiConvolution(X):
+    head = X
+    print('Input:', head.shape)
+    head = tf.layers.conv2d(head, 10, 6, 3, "valid") # 15 x 15
+    print('1:', head.shape)
+    head = tf.layers.conv2d(head, 20, 6, 1, "valid") # 10 x 10
+    print('2:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 10, 10, 4, "same") # 40 x 40
+    print('3:', head.shape)
+    head = head[:,:,:-9,:] # 40 x 31
+    print('4:', head.shape)
+    head = tf.layers.conv2d(head, 64, 5, 1, "same") # 40 x 31
+    print('5:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 1, 15, 9, "same", activation=None) # 360 x 274
+    print('Output:', head.shape)
+    return head
+
+
 
 
 #######################
@@ -41,7 +63,7 @@ use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.00404  # Learning Rate
+lr = 0.00406  # Learning Rate
 #######################
 
 # saveDir = os.path.join('experiments', input("Name this run..."))
@@ -56,9 +78,10 @@ def main():
     # Load data onto GPU memory - ensure network layers have GPU support
     config = tf.ConfigProto()
     config.gpu_options.allow_growth = True
+    # config.allow_soft_placement = True
     with tf.Session(config=config) as sess:
 
-        # sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+        sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 
         test = tf.placeholder_with_default(tf.constant(False, dtype=tf.bool), name="testing_flag", shape=())
 
@@ -67,9 +90,9 @@ def main():
                           false_fn=lambda: loader.get_train_region_batch)
 
 
+
         # if True:
         with tf.device('/cpu:0'):
-
             # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
             data = tf.constant(dtype=tf.float32, value=loader.get_data())
             X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
@@ -81,23 +104,23 @@ def main():
 
         # Define network
         with tf.name_scope('Base_Network'):
-            baseNetwork = singleConvolution(X)
+            # baseNetwork = singleConvolution(X)
+            baseNetwork = multiConvolution(X)
 
         predNetwork = baseNetwork
         with tf.name_scope('Prediction'):
-
-            outDim = [-1]
-            outDim.extend(size)
-            num_out = loader.num_out
-            Pred = singleLayer(predNetwork, outDim=num_out)
-            Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
+            # outDim = [-1]
+            # outDim.extend(size)
+            # num_out = loader.num_out
+            # Pred = trippleLayer(predNetwork, outDim=num_out)
+            # Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
+            Pred = predNetwork
 
         with tf.name_scope('loss'):
             predLoss = tf.losses.huber_loss(Y, Pred)
 
         with tf.name_scope('train'):
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(predLoss)
-
 
         tf.summary.scalar("PredictiveLoss", predLoss)
         tf.summary.histogram("loss", Pred - Y)
@@ -110,7 +133,7 @@ def main():
             tf.summary.image('Predicted', Pred, max_outputs=5),
             tf.summary.image('Label', Y, max_outputs=5),
             tf.summary.image('Error', Pred - Y, max_outputs=5),
-            tf.summary.image('Mean Error', tf.expand_dims(tf.reduce_mean(abs(Pred - Y), axis=0), axis=0), max_outputs=1)]
+            tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(Pred - Y), axis=0), axis=0), max_outputs=1)]
 
         # Create checkpoint saver
         saver = tf.train.Saver()
@@ -120,11 +143,12 @@ def main():
         # sess.run(print_op)
 
         # Setup tensorboard logging directories
+        net_name = 'multi_conv_pred_full'
         train_writer = tf.summary.FileWriter(
-            J('.', saveDir, 'turbulence_lr' + str(lr), 'train'), sess.graph)
+            J('.', saveDir, net_name + '_lr' + str(lr), 'train'), sess.graph)
 
         test_writer = tf.summary.FileWriter(
-            J('.', saveDir, 'turbulence_lr' + str(lr), 'validation'), sess.graph)
+            J('.', saveDir, net_name + '_lr' + str(lr), 'validation'), sess.graph)
 
         # Train model
         for batch in range(train_batch + 1):
