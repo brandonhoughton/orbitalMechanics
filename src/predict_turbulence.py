@@ -1,5 +1,6 @@
 import os
 import tensorflow as tf
+from tensorflow import keras
 from dataLoader.turbulence import Turbulence
 import util.summaries
 
@@ -49,21 +50,40 @@ def multiConvolution(X):
     print('Output:', head.shape)
     return head
 
-
+def reduceEnlarge(X):
+    head = X
+    print('Input:', head.shape)
+    head = tf.layers.conv2d(head, 20, 7, 3, "same")
+    print('1:', head.shape)
+    head = tf.layers.conv2d(head, 17, 5, 3, "same")
+    print('2:', head.shape)
+    head = tf.layers.conv2d(head, 15, 3, 1, "same")
+    print('2:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 15, 3, 1, "same")
+    print('3:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 20, 5, 3, "same")
+    print('3:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 20, 7, 3, "same")
+    print('4:', head.shape)
+    head = tf.layers.conv2d(head, 15, 5, 1, "same")
+    print('5:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 1, 5, 1, "same", activation=None)
+    print('Output:', head.shape)
+    return head
 
 
 #######################
 train_batch =   1000000000
-summary_step =    1000000
-validation_step = 5000000
-checkpoint_int = 500000000
+summary_step =    20000000
+validation_step = 20000000
+checkpoint_int = 5000000000
 pre_train_steps = -100
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.00406  # Learning Rate
+lr = 0.005  # Learning Rate
 #######################
 
 # saveDir = os.path.join('experiments', input("Name this run..."))
@@ -81,7 +101,7 @@ def main():
     # config.allow_soft_placement = True
     with tf.Session(config=config) as sess:
 
-        sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
+        # sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 
         test = tf.placeholder_with_default(tf.constant(False, dtype=tf.bool), name="testing_flag", shape=())
 
@@ -95,9 +115,37 @@ def main():
         with tf.device('/cpu:0'):
             # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
             data = tf.constant(dtype=tf.float32, value=loader.get_data())
-            X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
+            
+            # Simple 50 x 50 region with 20 frames of history. e.g. 20 x 
+            # 20 * ####
+                   #xx#
+                   #xx#
+                   ####
+            #X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
+
+            # Padded region with 0's everywhere except for where the patch is e.g.
+            #20 *  ########
+                   #      #
+                   #      #
+                   #  xx  #
+                   #  xx  #
+                   ########
+            X = tf.map_fn(lambda region:
+                          tf.pad(
+                              tf.slice(data, region[0], [50, 50, 20]),
+                              [[region[0, 0], loader.shape[0] - region[0, 0] - 50], [region[0, 1], loader.shape[1] - region[0, 1] - 50], [0, 0]],
+                              "CONSTANT"),
+                          regions,
+                          dtype=tf.float32,
+                          parallel_iterations=12)
+            X = tf.reshape(X, (-1, 360, 279, 20))
+                    
+
+
+            # Complete region 1 frame in the future
             size = [loader.shape[0], loader.shape[1], 1]
             Y = tf.map_fn(lambda region: tf.slice(data, region[2], size), regions, dtype=tf.float32)
+
 
         print(X.shape)
         # print_op = tf.Print(X,[X])
@@ -105,7 +153,8 @@ def main():
         # Define network
         with tf.name_scope('Base_Network'):
             # baseNetwork = singleConvolution(X)
-            baseNetwork = multiConvolution(X)
+            # baseNetwork = multiConvolution(X)
+            baseNetwork = reduceEnlarge(X)
 
         predNetwork = baseNetwork
         with tf.name_scope('Prediction'):
@@ -118,12 +167,13 @@ def main():
 
         with tf.name_scope('loss'):
             predLoss = tf.losses.huber_loss(Y, Pred)
+            # predLoss = tf.losses.mean_squared_error(Y, Pred)
 
         with tf.name_scope('train'):
             train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(predLoss)
 
         tf.summary.scalar("PredictiveLoss", predLoss)
-        tf.summary.histogram("loss", Pred - Y)
+        # tf.summary.histogram("loss", Pred - Y)
 
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
@@ -143,7 +193,7 @@ def main():
         # sess.run(print_op)
 
         # Setup tensorboard logging directories
-        net_name = 'multi_conv_pred_full'
+        net_name = 'padded_multi_conv_pred_full'
         train_writer = tf.summary.FileWriter(
             J('.', saveDir, net_name + '_lr' + str(lr), 'train'), sess.graph)
 
