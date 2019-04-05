@@ -87,24 +87,31 @@ def make_rectangles(location, window_size):
 # Sequence to frame model
 class Turbulence():
 
-    def __init__(self, batch_size=200, window_size=[50, 50, 21], num_windows=50000, num_test=200):
+    def __init__(self, batch_size=200, window_size=[50, 50, 20], num_windows=50000, num_test=200, pred_length   =1):
         # For small memory machines - just load the needed array rather than the whole .mat file
         # self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
         self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
         self.shape = self.data.shape
         print(self.shape)
 
+        self.pred_length = pred_length
+        window_size[-1] += self.pred_length
+
         # Define sub-sets of turbulent data
         low = [0 for _ in self.shape]
         high = [x - size for (x, size) in zip(self.shape, window_size)]
 
         self.input_size = window_size.copy()
-        self.input_size[-1] -= 1
+        self.input_size[-1] -= self.pred_length
         self.test_size = [-1]
         self.test_size.extend(self.input_size.copy())
-        self.test_size[-1] = 1
+        self.test_size[-1] = self.pred_length
         self.num_out = 1
         self.num_test = num_test
+
+        print('inpurt size', self.input_size)
+        print('test size', self.test_size)
+
 
         # predict patch
         # for d in self.test_size:

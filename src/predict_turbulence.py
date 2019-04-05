@@ -10,6 +10,29 @@ E = os.path.exists
 ## Architecures ##
 
 
+def lstm(X, outDim = 50):
+    rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(outDim)
+    initial_state = rnn_cell.zero_state(200, dtype=tf.float32)
+    head, _ = tf.nn.dynamic_rnn(rnn_cell, X, initial_state=initial_state, dtype=tf.float32)
+    return head
+
+def seq2seq(X, outDim= 512, outLen=10, num_layers=3):
+    # Create a `layers_stacked_count` of stacked RNNs (GRU cells here).
+    cells = []
+    for i in range(num_layers):
+        with tf.variable_scope('RNN_{}'.format(i)):
+            cells.append(tf.nn.rnn_cell.GRUCell(outDim))
+            # cells.append(tf.nn.rnn_cell.BasicLSTMCell(...))
+    cell = tf.nn.rnn_cell.MultiRNNCell(cells)
+    decoder_inputs = [ tf.zeros_like(X[0], dtype=tf.float32, name="GO")] + X[:-1]
+    dec_outputs, dec_memory = tf.contrib.legacy_seq2seq.basic_rnn_seq2seq(
+        X,
+        decoder_inputs,
+        cell
+    )
+
+    return dec_outputs
+
 def singleLayer(X, outDim = 50):
     # Hidden layers
     head = tf.layers.flatten(X)
@@ -73,7 +96,7 @@ def reduceEnlarge(X):
 
 
 #######################
-train_batch =   1000000000
+train_batch =   10000000000
 summary_step =    20000000
 validation_step = 20000000
 checkpoint_int = 5000000000
@@ -83,7 +106,7 @@ use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.005  # Learning Rate
+lr = 0.004  # Learning Rate
 #######################
 
 # saveDir = os.path.join('experiments', input("Name this run..."))
@@ -93,7 +116,7 @@ saveDir = os.path.join('experiments', 'turbulence')
 def main():
 
     # Load data
-    loader = Turbulence()
+    loader = Turbulence(pred_length=3)
 
     # Load data onto GPU memory - ensure network layers have GPU support
     config = tf.ConfigProto()
@@ -121,7 +144,11 @@ def main():
                    #xx#
                    #xx#
                    ####
-            #X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
+            X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
+
+            #For time series
+            # X = tf.transpose(X, perm=[0, 3, 1, 2])
+            # X = tf.reshape(X, (-1, 20, 50, 50))
 
             # Padded region with 0's everywhere except for where the patch is e.g.
             #20 *  ########
@@ -129,22 +156,25 @@ def main():
                    #      #
                    #  xx  #
                    #  xx  #
-                   ########
-            X = tf.map_fn(lambda region:
-                          tf.pad(
-                              tf.slice(data, region[0], [50, 50, 20]),
-                              [[region[0, 0], loader.shape[0] - region[0, 0] - 50], [region[0, 1], loader.shape[1] - region[0, 1] - 50], [0, 0]],
-                              "CONSTANT"),
-                          regions,
-                          dtype=tf.float32,
-                          parallel_iterations=12)
-            X = tf.reshape(X, (-1, 360, 279, 20))
+            #        ########
+            # X = tf.map_fn(lambda region:
+            #               tf.pad(
+            #                   tf.slice(data, region[0], [50, 50, 20]),
+            #                   [[region[0, 0], loader.shape[0] - region[0, 0] - 50], [region[0, 1], loader.shape[1] - region[0, 1] - 50], [0, 0]],
+            #                   "CONSTANT"),
+            #               regions,
+            #               dtype=tf.float32,
+            #               parallel_iterations=12)
+            # X = tf.reshape(X, (-1, 360, 279, 20))
                     
 
 
             # Complete region 1 frame in the future
-            size = [loader.shape[0], loader.shape[1], 1]
+            size = [50, 50, 3]
+            # size = [loader.shape[0], loader.shape[1], loader.pred_length]
             Y = tf.map_fn(lambda region: tf.slice(data, region[2], size), regions, dtype=tf.float32)
+            # size = [loader.pred_length, loader.shape[0], loader.shape[1]]
+            # Y = tf.transpose(Y, perm=[0, 3, 1, 2])
 
 
         print(X.shape)
@@ -152,18 +182,19 @@ def main():
 
         # Define network
         with tf.name_scope('Base_Network'):
-            # baseNetwork = singleConvolution(X)
+            baseNetwork = singleConvolution(X)
             # baseNetwork = multiConvolution(X)
-            baseNetwork = reduceEnlarge(X)
+            # baseNetwork = reduceEnlarge(X)
+            # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
 
         predNetwork = baseNetwork
         with tf.name_scope('Prediction'):
-            # outDim = [-1]
-            # outDim.extend(size)
-            # num_out = loader.num_out
-            # Pred = trippleLayer(predNetwork, outDim=num_out)
-            # Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
-            Pred = predNetwork
+            outDim = [-1]
+            outDim.extend(size)
+            num_out = 50 * 50 * loader.pred_length #loader.num_out
+            Pred = singleLayer(baseNetwork, outDim=num_out)
+            Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
+            # Pred = predNetwork
 
         with tf.name_scope('loss'):
             predLoss = tf.losses.huber_loss(Y, Pred)
@@ -193,7 +224,7 @@ def main():
         # sess.run(print_op)
 
         # Setup tensorboard logging directories
-        net_name = 'padded_multi_conv_pred_full'
+        net_name = '3_step_prediction_single_fc'
         train_writer = tf.summary.FileWriter(
             J('.', saveDir, net_name + '_lr' + str(lr), 'train'), sess.graph)
 
