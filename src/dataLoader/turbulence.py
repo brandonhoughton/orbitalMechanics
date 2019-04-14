@@ -17,12 +17,17 @@ from sklearn.model_selection import train_test_split
 
 J = os.path.join
 E = os.path.exists
-dataDir = J('data','turbulence')
+dataDir = J('data', 'turbulence')
 datasets = [
     'velocity_and_vorticity_field.mat',
-    'velocity_and_vorticity_field_1200s.mat']
+    'velocity_and_vorticity_field_1200s.mat',
+    'periodic_0',
+    'periodic_1',
+    'periodic_2',
+    'periodic_3']
 SMALL_DATASET = 0
 LARGE_DATASET = 1
+TEST_DATASET_1 = 2
 dynamics = 'vfield_local_dynamics.mat'
 RANDOM_SEED = 42
 
@@ -90,7 +95,7 @@ class Turbulence():
     def __init__(self, batch_size=200, window_size=[50, 50, 20], num_windows=50000, num_test=200, pred_length   =1):
         # For small memory machines - just load the needed array rather than the whole .mat file
         # self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
-        self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
+        self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[TEST_DATASET_1]))['U_t']
         self.shape = self.data.shape
         print(self.shape)
 
