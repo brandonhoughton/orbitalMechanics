@@ -33,27 +33,29 @@ def seq2seq(X, outDim= 512, outLen=10, num_layers=3):
 
     return dec_outputs
 
-def singleLayer(X, outDim = 50, activ=tf.nn.relu):
+def singleLayer(X, outDim = 50, activation=tf.nn.relu):
     # Hidden layers
     head = tf.layers.flatten(X)
-    head = tf.layers.dropout(head)
     # head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, use_bias=True)
-    head = tf.layers.dense(head, outDim, activation=activ, use_bias=True)
+    head = tf.layers.dense(head, outDim, activation=activation, use_bias=True)
     return head
+
+def dropout(X):
+    return tf.layers.dropout(X)
 
 
 def singleConvolution(X, numFilters = 35, filterSize=10, stride=5):
     # Hidden layers
-    head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same", activation=tf.nn.sigmoid)
+    head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same", activation=tf.nn.relu)
     return head
 
 
-def trippleLayer(X, outDim = 16):
+def trippleLayer(X, outDim = 128):
     head = tf.layers.flatten(X)
     head = tf.layers.dense(head, 64, activation=tf.nn.sigmoid, name="dense_1", use_bias=True)
+    head = tf.layers.dense(head, 32, activation=tf.nn.sigmoid, name="dense_2", use_bias=True)
     head = tf.layers.dropout(head)
-    head = tf.layers.dense(head, 12, activation=tf.nn.sigmoid, name="dense_2", use_bias=True)
-    head = tf.layers.dense(head, outDim, activation=None, name="dense_3", use_bias=True)
+    head = tf.layers.dense(head, outDim, activation=None, name="dense_4", use_bias=True)
     return head
 
 def multiConvolution(X):
@@ -183,8 +185,9 @@ def main():
         # Define network
         with tf.name_scope('Base_Network'):
             baseNetwork = singleConvolution(X)
-            baseNetwork = singleLayer(baseNetwork, 2500)
-            baseNetwork = singleLayer(baseNetwork, 1250)
+            baseNetwork = singleLayer(baseNetwork, outDim=32)
+            baseNetwork = singleLayer(baseNetwork, outDim=32)
+            baseNetwork = dropout(baseNetwork)
             # baseNetwork = multiConvolution(X)
             # baseNetwork = reduceEnlarge(X)
             # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
@@ -193,8 +196,8 @@ def main():
         with tf.name_scope('Prediction'):
             outDim = [-1]
             outDim.extend(size)
-            num_out = 50 * 50 * 20 #loader.num_out
-            Pred = singleLayer(baseNetwork, outDim=num_out,activ=None)
+            num_out = 50 * 50 * loader.pred_length #loader.num_out
+            Pred = singleLayer(baseNetwork, outDim=num_out, activation=None)
             Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
             # Pred = predNetwork
 
@@ -211,7 +214,6 @@ def main():
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
 
-        # TODO - split these into images instead of sequences 5 at a time
         marged_with_imgs = \
             [merged,
             tf.summary.image('Predicted_t0', Pred[:, :, :, 0:1], max_outputs=5),
@@ -247,7 +249,7 @@ def main():
         # sess.run(print_op)
 
         # Setup tensorboard logging directories
-        net_name = '20_step_prediction_new_seed_35conv_by5_2xfc_w_relu'
+        net_name = '3_step_prediction_conv_3fc_out'
         train_writer = tf.summary.FileWriter(
             J('.', saveDir, net_name + '_lr' + str(lr), 'train'), sess.graph)
 
