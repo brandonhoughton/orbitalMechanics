@@ -33,27 +33,29 @@ def seq2seq(X, outDim= 512, outLen=10, num_layers=3):
 
     return dec_outputs
 
-def singleLayer(X, outDim = 50):
+def singleLayer(X, outDim = 50, activation=tf.nn.relu):
     # Hidden layers
     head = tf.layers.flatten(X)
-    head = tf.layers.dropout(head)
     # head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, use_bias=True)
-    head = tf.layers.dense(head, outDim, activation=None, use_bias=True)
+    head = tf.layers.dense(head, outDim, activation=activation, use_bias=True)
     return head
+
+def dropout(X):
+    return tf.layers.dropout(X)
 
 
 def singleConvolution(X, numFilters = 5, filterSize=10, stride=5):
     # Hidden layers
-    head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same")
+    head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same", activation=tf.nn.relu)
     return head
 
 
-def trippleLayer(X, outDim = 16):
+def trippleLayer(X, outDim = 128):
     head = tf.layers.flatten(X)
     head = tf.layers.dense(head, 64, activation=tf.nn.sigmoid, name="dense_1", use_bias=True)
+    head = tf.layers.dense(head, 32, activation=tf.nn.sigmoid, name="dense_2", use_bias=True)
     head = tf.layers.dropout(head)
-    head = tf.layers.dense(head, 12, activation=tf.nn.sigmoid, name="dense_2", use_bias=True)
-    head = tf.layers.dense(head, outDim, activation=None, name="dense_3", use_bias=True)
+    head = tf.layers.dense(head, outDim, activation=None, name="dense_4", use_bias=True)
     return head
 
 def multiConvolution(X):
@@ -183,6 +185,9 @@ def main():
         # Define network
         with tf.name_scope('Base_Network'):
             baseNetwork = singleConvolution(X)
+            baseNetwork = singleLayer(baseNetwork, outDim=32)
+            baseNetwork = singleLayer(baseNetwork, outDim=32)
+            baseNetwork = dropout(baseNetwork)
             # baseNetwork = multiConvolution(X)
             # baseNetwork = reduceEnlarge(X)
             # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
@@ -192,7 +197,7 @@ def main():
             outDim = [-1]
             outDim.extend(size)
             num_out = 50 * 50 * loader.pred_length #loader.num_out
-            Pred = singleLayer(baseNetwork, outDim=num_out)
+            Pred = singleLayer(baseNetwork, outDim=num_out, activation=None)
             Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
             # Pred = predNetwork
 
@@ -224,7 +229,7 @@ def main():
         # sess.run(print_op)
 
         # Setup tensorboard logging directories
-        net_name = '3_step_prediction_single_fc'
+        net_name = '3_step_prediction_conv_3fc_out'
         train_writer = tf.summary.FileWriter(
             J('.', saveDir, net_name + '_lr' + str(lr), 'train'), sess.graph)
 

@@ -24,10 +24,16 @@ datasets = [
     'periodic_0',
     'periodic_1',
     'periodic_2',
-    'periodic_3']
+    'periodic_3',
+    'periodic_4']
 SMALL_DATASET = 0
 LARGE_DATASET = 1
 TEST_DATASET_1 = 2
+TEST_DATASET_2 = 3
+TEST_DATASET_3 = 4
+TEST_DATASET_4 = 5
+TEST_DATASET_5 = 6
+
 dynamics = 'vfield_local_dynamics.mat'
 RANDOM_SEED = 42
 
@@ -95,7 +101,7 @@ class Turbulence():
     def __init__(self, batch_size=200, window_size=[50, 50, 20], num_windows=50000, num_test=200, pred_length   =1):
         # For small memory machines - just load the needed array rather than the whole .mat file
         # self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
-        self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[TEST_DATASET_1]))['U_t']
+        self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[TEST_DATASET_5]))['U_t']
         self.shape = self.data.shape
         print(self.shape)
 

@@ -12,7 +12,8 @@ def sin(x, y, t):
     # return np.sin(theta_x) * np.sin(theta_t) + np.cos(theta_y) * np.cos(theta_t)  # 0
     # return np.sin(theta_x) * np.sin(theta_t) + np.cos(theta_y) * np.cos(theta_t/2)  # 1
     # return (np.sin(theta_x) + np.cos(theta_y)) * np.cos(theta_t)  # 2
-    return np.sin(theta_x + theta_t) + np.cos(theta_y + theta_t / 0.5)  # 3
+    # return np.sin(theta_x + theta_t) + np.cos(theta_y + theta_t / 0.5)  # 3
+    return np.sin(theta_x*2) * np.sin(theta_t * 8) + np.cos(theta_y*2) * np.cos(theta_t * 8 /2)  # 4
 
 
 def generate():
@@ -36,7 +37,7 @@ def visualize(arr):
 
 
 def save(arr):
-    scipy.io.savemat('../data/periodic_3.mat', {'U_t': arr})
+    scipy.io.savemat('../../data/periodic_4.mat', {'U_t': arr})
     pass
     # Save file
     # TODO
