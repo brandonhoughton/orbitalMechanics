@@ -87,15 +87,16 @@ def make_rectangles(location, window_size):
 # Sequence to frame model
 class Turbulence():
 
-    def __init__(self, batch_size=200, window_size=[50, 50, 20], num_windows=50000, num_test=200, pred_length   =1):
+    def __init__(self, batch_size=64, window_size=[50, 50, 20], num_windows=50000, num_test=64, pred_length=20):
         # For small memory machines - just load the needed array rather than the whole .mat file
         # self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
         self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
         self.shape = self.data.shape
-        print(self.shape)
+        print('shape:', self.shape)
 
         self.pred_length = pred_length
         window_size[-1] += self.pred_length
+        print('window_size', window_size)
 
         # Define sub-sets of turbulent data
         low = [0 for _ in self.shape]

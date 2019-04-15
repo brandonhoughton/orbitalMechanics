@@ -33,18 +33,18 @@ def seq2seq(X, outDim= 512, outLen=10, num_layers=3):
 
     return dec_outputs
 
-def singleLayer(X, outDim = 50):
+def singleLayer(X, outDim = 50, activ=tf.nn.relu):
     # Hidden layers
     head = tf.layers.flatten(X)
     head = tf.layers.dropout(head)
     # head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, use_bias=True)
-    head = tf.layers.dense(head, outDim, activation=None, use_bias=True)
+    head = tf.layers.dense(head, outDim, activation=activ, use_bias=True)
     return head
 
 
-def singleConvolution(X, numFilters = 5, filterSize=10, stride=5):
+def singleConvolution(X, numFilters = 35, filterSize=10, stride=5):
     # Hidden layers
-    head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same")
+    head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same", activation=tf.nn.sigmoid)
     return head
 
 
@@ -59,17 +59,17 @@ def trippleLayer(X, outDim = 16):
 def multiConvolution(X):
     head = X
     print('Input:', head.shape)
-    head = tf.layers.conv2d(head, 10, 6, 3, "valid") # 15 x 15
+    head = tf.layers.conv2d(head, 10, 6, 3, "valid")  # 15 x 15
     print('1:', head.shape)
-    head = tf.layers.conv2d(head, 20, 6, 1, "valid") # 10 x 10
+    head = tf.layers.conv2d(head, 20, 6, 1, "valid")  # 10 x 10
     print('2:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 10, 10, 4, "same") # 40 x 40
+    head = tf.layers.conv2d_transpose(head, 10, 10, 4, "same")  # 40 x 40
     print('3:', head.shape)
     head = head[:,:,:-9,:] # 40 x 31
     print('4:', head.shape)
-    head = tf.layers.conv2d(head, 64, 5, 1, "same") # 40 x 31
+    head = tf.layers.conv2d(head, 64, 5, 1, "same")  # 40 x 31
     print('5:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 1, 15, 9, "same", activation=None) # 360 x 274
+    head = tf.layers.conv2d_transpose(head, 1, 15, 9, "same", activation=None)  # 360 x 274
     print('Output:', head.shape)
     return head
 
@@ -97,8 +97,8 @@ def reduceEnlarge(X):
 
 #######################
 train_batch =   10000000000
-summary_step =    20000000
-validation_step = 20000000
+summary_step =    100000000
+validation_step = 100000000
 checkpoint_int = 5000000000
 pre_train_steps = -100
 #######################
@@ -112,11 +112,11 @@ lr = 0.004  # Learning Rate
 # saveDir = os.path.join('experiments', input("Name this run..."))
 saveDir = os.path.join('experiments', 'turbulence')
 
-#%%mai
+
 def main():
 
     # Load data
-    loader = Turbulence(pred_length=3)
+    loader = Turbulence(pred_length=20)
 
     # Load data onto GPU memory - ensure network layers have GPU support
     config = tf.ConfigProto()
@@ -170,7 +170,7 @@ def main():
 
 
             # Complete region 1 frame in the future
-            size = [50, 50, 3]
+            size = [50, 50, 20]
             # size = [loader.shape[0], loader.shape[1], loader.pred_length]
             Y = tf.map_fn(lambda region: tf.slice(data, region[2], size), regions, dtype=tf.float32)
             # size = [loader.pred_length, loader.shape[0], loader.shape[1]]
@@ -183,6 +183,8 @@ def main():
         # Define network
         with tf.name_scope('Base_Network'):
             baseNetwork = singleConvolution(X)
+            baseNetwork = singleLayer(baseNetwork, 2500)
+            baseNetwork = singleLayer(baseNetwork, 1250)
             # baseNetwork = multiConvolution(X)
             # baseNetwork = reduceEnlarge(X)
             # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
@@ -191,8 +193,8 @@ def main():
         with tf.name_scope('Prediction'):
             outDim = [-1]
             outDim.extend(size)
-            num_out = 50 * 50 * loader.pred_length #loader.num_out
-            Pred = singleLayer(baseNetwork, outDim=num_out)
+            num_out = 50 * 50 * 20 #loader.num_out
+            Pred = singleLayer(baseNetwork, outDim=num_out,activ=None)
             Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
             # Pred = predNetwork
 
@@ -209,12 +211,33 @@ def main():
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
 
+        # TODO - split these into images instead of sequences 5 at a time
         marged_with_imgs = \
             [merged,
-            tf.summary.image('Predicted', Pred, max_outputs=5),
-            tf.summary.image('Label', Y, max_outputs=5),
-            tf.summary.image('Error', Pred - Y, max_outputs=5),
-            tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(Pred - Y), axis=0), axis=0), max_outputs=1)]
+            tf.summary.image('Predicted_t0', Pred[:, :, :, 0:1], max_outputs=5),
+            tf.summary.image('Label', Y[:, :, :, 0:1], max_outputs=5),
+            tf.summary.image('Error', Pred[:, :, :, 0:1] - Y[:, :, :, 0:1], max_outputs=5),
+            tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 0:1] - Y[:, :, :, 0:1]), axis=0), axis=0), max_outputs=1),
+             ##
+            tf.summary.image('Predicted_t5', Pred[:, :, :, 5:6], max_outputs=5),
+            tf.summary.image('Label_t5', Y[:, :, :, 5:6], max_outputs=5),
+            tf.summary.image('Error_t5', Pred[:, :, :, 5:6] - Y[:, :, :, 5:6], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t5', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 5:6] - Y[:, :, :, 5:6]), axis=0), axis=0), max_outputs=1),
+             ##
+            tf.summary.image('Predicted_t10', Pred[:, :, :, 10:11], max_outputs=5),
+            tf.summary.image('Label_t10', Y[:, :, :, 10:11], max_outputs=5),
+            tf.summary.image('Error_t10', Pred[:, :, :, 10:11] - Y[:, :, :, 10:11], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t10', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 10:11] - Y[:, :, :, 10:11]), axis=0), axis=0), max_outputs=1),
+             ##
+            tf.summary.image('Predicted_t15', Pred[:, :, :, 15:16], max_outputs=5),
+            tf.summary.image('Label_t15', Y[:, :, :, 15:16], max_outputs=5),
+            tf.summary.image('Error_t15', Pred[:, :, :, 15:16] - Y[:, :, :, 15:16], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t15', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 15:16] - Y[:, :, :, 15:16]), axis=0), axis=0), max_outputs=1),
+            ##
+            tf.summary.image('Predicted_t19', Pred[:, :, :, 19:20], max_outputs=5),
+            tf.summary.image('Label_t19', Y[:, :, :, 19:20], max_outputs=5),
+            tf.summary.image('Error_t19', Pred[:, :, :, 19:20] - Y[:, :, :, 19:20], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t19', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 19:20] - Y[:, :, :, 19:20]), axis=0), axis=0), max_outputs=1)]
 
         # Create checkpoint saver
         saver = tf.train.Saver()
@@ -224,7 +247,7 @@ def main():
         # sess.run(print_op)
 
         # Setup tensorboard logging directories
-        net_name = '3_step_prediction_single_fc'
+        net_name = '20_step_prediction_new_seed_35conv_by5_2xfc_w_relu'
         train_writer = tf.summary.FileWriter(
             J('.', saveDir, net_name + '_lr' + str(lr), 'train'), sess.graph)
 
