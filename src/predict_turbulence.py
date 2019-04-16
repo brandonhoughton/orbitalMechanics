@@ -46,7 +46,7 @@ def dropout(X):
     return tf.layers.dropout(X)
 
 
-def singleConvolution(X, numFilters = 35, filterSize=10, stride=5):
+def singleConvolution(X, numFilters = 5, filterSize=5, stride=3):
     # Hidden layers
     head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same", activation=tf.nn.relu)
     return head
@@ -58,6 +58,23 @@ def trippleLayer(X, outDim = 128):
     head = tf.layers.dense(head, 32, activation=tf.nn.sigmoid, name="dense_2", use_bias=True)
     head = tf.layers.dropout(head)
     head = tf.layers.dense(head, outDim, activation=None, name="dense_4", use_bias=True)
+    return head
+
+def fulllyConvPatchToPatch(X):
+    head = X
+    print('Input:', head.shape)
+    head = tf.layers.conv2d(head, 20, 15, 5, "same", activation=tf.nn.relu)
+    print('1:', head.shape)
+    head = tf.layers.conv2d(head, 20, 10, 2, "same", activation=tf.nn.relu)
+    print('2:', head.shape)
+    head = tf.layers.conv2d(head, 40, 5, 1, "same", activation=tf.nn.relu)
+    print('3:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 40, 5, 1, "same", activation=tf.nn.relu)  # 50 x 50
+    print('4:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 20, 10, 2, "same", activation=tf.nn.sigmoid)  # 50 x 50
+    print('5:', head.shape)
+    head = tf.layers.conv2d_transpose(head, 20, 15, 5, "same", activation=None)  # 50 x 50
+    print('Output:', head.shape)
     return head
 
 def multiConvolution(X):
@@ -101,8 +118,8 @@ def reduceEnlarge(X):
 
 #######################
 train_batch =   1000000
-summary_step =     1000
-validation_step =  1000
+summary_step =      200
+validation_step =   200
 checkpoint_int = 500000
 pre_train_steps = -100
 #######################
@@ -116,7 +133,7 @@ lr = 0.001  # Learning Rate
 # saveDir = os.path.join('experiments', input("Name this run..."))
 saveDir = os.path.join('experiments', 'turbulence')
 
-net_name = '3_step_prediction_conv_3fc_out_w_grads_and_training'
+net_name = 'full_conv_more_inner_filters'
 
 LOG_DIR = J('.', saveDir, net_name + '_lr' + str(lr))
 
@@ -176,7 +193,7 @@ def main():
             #               dtype=tf.float32,
             #               parallel_iterations=12)
             # X = tf.reshape(X, (-1, 360, 279, 20))
-                    
+
 
 
             # Complete region 1 frame in the future
@@ -192,10 +209,11 @@ def main():
 
         # Define network
         with tf.name_scope('Base_Network'):
-            baseNetwork = singleConvolution(X)
-            baseNetwork = singleLayer(baseNetwork, outDim=32)
-            baseNetwork = singleLayer(baseNetwork, outDim=32)
-            baseNetwork = dropout(baseNetwork)
+            baseNetwork = fulllyConvPatchToPatch(X)
+            # baseNetwork = singleConvolution(X)
+            # baseNetwork = dropout(baseNetwork)
+            # baseNetwork = singleLayer(baseNetwork, outDim=32)
+            # baseNetwork = singleLayer(baseNetwork, outDim=64, activation=tf.nn.sigmoid)
             # baseNetwork = multiConvolution(X)
             # baseNetwork = reduceEnlarge(X)
             # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
@@ -204,8 +222,9 @@ def main():
         with tf.name_scope('Prediction'):
             outDim = [-1]
             outDim.extend(size)
-            num_out = 50 * 50 * loader.pred_length #loader.num_out
-            Pred = singleLayer(baseNetwork, outDim=num_out, activation=tf.nn.sigmoid)
+            # num_out = 50 * 50 * loader.pred_length #loader.num_out
+            # Pred = singleLayer(baseNetwork, outDim=num_out, activation=None)
+            Pred = baseNetwork
             Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
             # Pred = predNetwork
 
@@ -220,7 +239,7 @@ def main():
 
         tf.summary.scalar("PredictiveLoss", predLoss)
         for grad in grads:
-            tf.summary.scalar("MeanGrad" + str(grad), tf.reduce_mean(grad))
+            tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
             tf.summary.histogram("grad" + str(grad), grad)
 
         # Collect summary stats for train variables
