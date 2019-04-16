@@ -1,8 +1,10 @@
 import os
 import tensorflow as tf
 from tensorflow import keras
+from tensorboard.plugins.beholder import Beholder
 from dataLoader.turbulence import Turbulence
 import util.summaries
+
 
 J = os.path.join
 E = os.path.exists
@@ -98,24 +100,30 @@ def reduceEnlarge(X):
 
 
 #######################
-train_batch =   10000000000
-summary_step =    100000000
-validation_step = 100000000
-checkpoint_int = 5000000000
+train_batch =   1000000
+summary_step =     1000
+validation_step =  1000
+checkpoint_int = 500000
 pre_train_steps = -100
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.004  # Learning Rate
+lr = 0.001  # Learning Rate
 #######################
 
 # saveDir = os.path.join('experiments', input("Name this run..."))
 saveDir = os.path.join('experiments', 'turbulence')
 
+net_name = '3_step_prediction_conv_3fc_out_w_grads_and_training'
+
+LOG_DIR = J('.', saveDir, net_name + '_lr' + str(lr))
 
 def main():
+
+    # Start beholder
+    beholder = Beholder(LOG_DIR)
 
     # Load data
     loader = Turbulence(pred_length=20)
@@ -197,7 +205,7 @@ def main():
             outDim = [-1]
             outDim.extend(size)
             num_out = 50 * 50 * loader.pred_length #loader.num_out
-            Pred = singleLayer(baseNetwork, outDim=num_out, activation=None)
+            Pred = singleLayer(baseNetwork, outDim=num_out, activation=tf.nn.sigmoid)
             Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
             # Pred = predNetwork
 
@@ -206,10 +214,14 @@ def main():
             # predLoss = tf.losses.mean_squared_error(Y, Pred)
 
         with tf.name_scope('train'):
-            train_step = tf.train.AdamOptimizer(learning_rate=lr).minimize(predLoss)
+            adam = tf.train.AdamOptimizer(learning_rate=lr)
+            grads = adam.compute_gradients(predLoss)
+            train_step = adam.apply_gradients(grads)
 
         tf.summary.scalar("PredictiveLoss", predLoss)
-        # tf.summary.histogram("loss", Pred - Y)
+        for grad in grads:
+            tf.summary.scalar("MeanGrad" + str(grad), tf.reduce_mean(grad))
+            tf.summary.histogram("grad" + str(grad), grad)
 
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
@@ -249,31 +261,30 @@ def main():
         # sess.run(print_op)
 
         # Setup tensorboard logging directories
-        net_name = '3_step_prediction_conv_3fc_out'
         train_writer = tf.summary.FileWriter(
-            J('.', saveDir, net_name + '_lr' + str(lr), 'train'), sess.graph)
+            J(LOG_DIR, 'train'), sess.graph)
 
         test_writer = tf.summary.FileWriter(
-            J('.', saveDir, net_name + '_lr' + str(lr), 'validation'), sess.graph)
+            J(LOG_DIR, 'validation'), sess.graph)
 
         # Train model
         for batch in range(train_batch + 1):
-            if batch > pre_train_steps:
-                if batch % summary_step == 0:
-                    loss, _, summary = sess.run([predLoss, train_step, merged])
-                    train_writer.add_summary(summary, batch)
-                    print(loss, batch)
+            if batch > pre_train_steps and batch % summary_step == 0:
+                loss, summary = sess.run([predLoss, merged])
+                train_writer.add_summary(summary, batch)
+                print(loss, batch)
             else:
-                sess.run([predLoss, train_step, merged])
+                sess.run(train_step)
+                # beholder.update(sess)
 
             if batch % validation_step == 0:
-                flags = dict({'testing_flag:0':True})
+                flags = dict({'testing_flag:0': True})
                 summaries = sess.run(marged_with_imgs, feed_dict=flags)
                 for summary in summaries:
                     test_writer.add_summary(summary, batch)
 
             if batch % checkpoint_int == 0:
-                saver.save(sess, save_path=J('.', saveDir, 'network', str(batch)))
+                saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch)))
 
 if __name__ == "__main__":
     main()
