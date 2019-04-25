@@ -165,51 +165,34 @@ def main():
         with tf.device('/cpu:0'):
             # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
             data = tf.constant(dtype=tf.float32, value=loader.get_data())
-            
-            # Simple 50 x 50 region with 20 frames of history. e.g. 20 x 
-            # 20 * ####
-                   #xx#
-                   #xx#
-                   ####
-            # X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
-            X = tf.cast(regions[:, 0], dtype=tf.float32)
 
-            #For time series
-            # X = tf.transpose(X, perm=[0, 3, 1, 2])
-            # X = tf.reshape(X, (-1, 20, 50, 50))
+            # Simple 50 x 50 region with 20 frames of history.
+            X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
 
-            # Padded region with 0's everywhere except for where the patch is e.g.
-            #20 *  ########
-                   #      #
-                   #      #
-                   #  xx  #
-                   #  xx  #
-            #        ########
-            # X = tf.map_fn(lambda region:
-            #               tf.pad(
-            #                   tf.slice(data, region[0], [50, 50, 20]),
-            #                   [[region[0, 0], loader.shape[0] - region[0, 0] - 50], [region[0, 1], loader.shape[1] - region[0, 1] - 50], [0, 0]],
-            #                   "CONSTANT"),
-            #               regions,
-            #               dtype=tf.float32,
-            #               parallel_iterations=12)
-            # X = tf.reshape(X, (-1, 360, 279, 20))
+            # Tensorflow wants time first
+            X = tf.transpose(X, perm=[0, 3, 1, 2])
 
+            # Ensure that the shape is well defined ( mapping slice operations is evaluated as a dynamic size)
+            X = tf.reshape(X, (-1, 20, 50, 50))
 
 
             # Complete region 1 frame in the future
             size = [50, 50, 20]
-            # size = [loader.shape[0], loader.shape[1], loader.pred_length]
             Y = tf.map_fn(lambda region: tf.slice(data, region[0], size), regions, dtype=tf.float32)
-            # size = [loader.pred_length, loader.shape[0], loader.shape[1]]
-            # Y = tf.transpose(Y, perm=[0, 3, 1, 2])
 
+            # Map the label to the same time first ordering
+            Y = tf.transpose(Y, perm=[0, 3, 1, 2])
+
+            outDim = [-1]
+            outDim.extend(size)
+            Y = tf.reshape(Y, outDim)
 
         print(X.shape)
         # print_op = tf.Print(X,[X])
 
         # Define network
         with tf.name_scope('Base_Network'):
+
             baseNetwork = trippleLayer(X)
             # baseNetwork = singleConvolution(X)
             # baseNetwork = dropout(baseNetwork)
@@ -219,10 +202,7 @@ def main():
             # baseNetwork = reduceEnlarge(X)
             # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
 
-        predNetwork = baseNetwork
         with tf.name_scope('Prediction'):
-            outDim = [-1]
-            outDim.extend(size)
             num_out = 50 * 50 * loader.pred_length #loader.num_out
             Pred = singleLayer(baseNetwork, outDim=num_out, activation=None)
             # Pred = baseNetwork
