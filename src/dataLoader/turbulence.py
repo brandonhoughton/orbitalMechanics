@@ -98,7 +98,8 @@ def make_rectangles(location, window_size):
 # Sequence to frame model
 class Turbulence():
 
-    def __init__(self, batch_size=64, window_size=[50, 50, 20], num_windows=50000, num_test=64, pred_length=20):
+    def __init__(self, batch_size=64, window_size=[50, 50, 20], num_windows=50000, pred_length=20):
+        self.batch_size = batch_size
         # For small memory machines - just load the needed array rather than the whole .mat file
         # self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[LARGE_DATASET]))['U_t']
         self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[TEST_DATASET_5]))['U_t']
@@ -119,7 +120,7 @@ class Turbulence():
         self.test_size.extend(self.input_size.copy())
         self.test_size[-1] = self.pred_length
         self.num_out = 1
-        self.num_test = num_test
+        self.num_test = batch_size
 
         print('inpurt size', self.input_size)
         print('test size', self.test_size)
@@ -146,10 +147,10 @@ class Turbulence():
         # regions = begins.map(lambda location: make_rectangles(location, window_size))
 
         # Train test split
-        test_regions = regions.take(num_test).repeat()
-        train_regions = regions.skip(num_test).repeat()
+        test_regions = regions.take(self.num_test).repeat()
+        train_regions = regions.skip(self.num_test).repeat()
 
-        self.get_test_region_batch = make_iterator_no_shuffle(test_regions, num_windows, num_test)
+        self.get_test_region_batch = make_iterator_no_shuffle(test_regions, num_windows, self.num_test)
         self.get_train_region_batch = make_iterator(train_regions, num_windows, batch_size)
 
         self.inputs = {

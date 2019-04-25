@@ -12,11 +12,33 @@ E = os.path.exists
 ## Architecures ##
 
 
-def lstm(X, outDim = 50):
-    rnn_cell = tf.nn.rnn_cell.BasicLSTMCell(outDim)
-    initial_state = rnn_cell.zero_state(200, dtype=tf.float32)
-    head, _ = tf.nn.dynamic_rnn(rnn_cell, X, initial_state=initial_state, dtype=tf.float32)
-    return head
+def lstm_encode(X, outDim=500, batchSize = 64):
+    print('Input shape:', X.get_shape().as_list())
+    rnn_cell = tf.nn.rnn_cell.LSTMCell(outDim, name="encode")
+    initial_state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
+    print('Zero state shape:(', initial_state[0].get_shape().as_list(), ',', initial_state[1].get_shape().as_list(), ')')
+    output, state = tf.nn.dynamic_rnn(rnn_cell, X, initial_state=initial_state, dtype=tf.float32, time_major=True)
+
+    print('Output state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
+
+    # We ignore the output of this layer, just need it to build an embedding
+    return state
+
+
+def lstm_decode(X, outDim=500, batchSize=64, inputShape=[20, -1, 50 * 50]):
+    padded = tf.ones([20, batchSize, 50*50], dtype=tf.float32)
+    print('Padded input shape:', padded.get_shape().as_list())
+
+    state = X
+    # state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
+    print('State shape:(', X[0].get_shape().as_list(), ',', X[1].get_shape().as_list(), ')')
+    # print('Zero state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
+
+    rnn_cell = tf.nn.rnn_cell.LSTMCell(outDim, name='decode')
+    output, state = tf.nn.dynamic_rnn(rnn_cell, padded, initial_state=state, dtype=tf.float32, time_major=True)
+
+    # We ignore the state, just  return the output
+    return output
 
 def seq2seq(X, outDim= 512, outLen=10, num_layers=3):
     # Create a `layers_stacked_count` of stacked RNNs (GRU cells here).
@@ -118,10 +140,10 @@ def reduceEnlarge(X):
 
 #######################
 train_batch =   10000000
-summary_step =      2000
+summary_step =       200
 validation_step =   2000
 checkpoint_int = 500000
-pre_train_steps = -100
+pre_train_steps = 2000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
@@ -130,12 +152,13 @@ g = 0.005   # Scale for Phi
 lr = 0.004  # Learning Rate
 #######################
 
-# saveDir = os.path.join('experiments', input("Name this run..."))
+########################################################################################################################
+
+net_name = 'lstm_encode_decode_w_fc'
 saveDir = os.path.join('experiments', 'turbulence')
-
-net_name = 'sin_func_test'
-
 LOG_DIR = J('.', saveDir, net_name + '_lr' + str(lr))
+
+########################################################################################################################
 
 def main():
 
@@ -159,41 +182,47 @@ def main():
                           true_fn=lambda: loader.get_test_region_batch,
                           false_fn=lambda: loader.get_train_region_batch)
 
-
-
         # if True:
         with tf.device('/cpu:0'):
-            # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
-            data = tf.constant(dtype=tf.float32, value=loader.get_data())
+            with tf.name_scope('Data'):
+                # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
+                data = tf.constant(dtype=tf.float32, value=loader.get_data())
 
-            # Simple 50 x 50 region with 20 frames of history.
-            X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
+########################################################################################################################
 
-            # Tensorflow wants time first
-            X = tf.transpose(X, perm=[0, 3, 1, 2])
+            with tf.name_scope('Input'):
+                # Simple 50 x 50 region with 20 frames of history.
+                X = tf.map_fn(lambda region: tf.slice(data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
 
-            # Ensure that the shape is well defined ( mapping slice operations is evaluated as a dynamic size)
-            X = tf.reshape(X, (-1, 20, 50, 50))
+                # Tensorflow wants time first, we have [batch, u, v, time]:[0, 1, 2, 3]
+                X = tf.transpose(X, perm=[3, 0, 1, 2])
 
+                # Ensure that the shape is well defined ( mapping slice operations is evaluated as a dynamic size)
+                # X = tf.reshape(X, (-1, 20, 50, 50))  # Un-flattened for convolutional layers
+                X = tf.reshape(X, (20, -1, 50 * 50))  # Flattened for fully connected layers
 
-            # Complete region 1 frame in the future
-            size = [50, 50, 20]
-            Y = tf.map_fn(lambda region: tf.slice(data, region[0], size), regions, dtype=tf.float32)
+            with tf.name_scope('Label'):
+                size = [50, 50, 20]
+                Y = tf.map_fn(lambda region: tf.slice(data, region[0], size), regions, dtype=tf.float32)
 
-            # Map the label to the same time first ordering
-            Y = tf.transpose(Y, perm=[0, 3, 1, 2])
+                # Map the label to the same time first ordering
+                # Y = tf.transpose(Y, perm=[0, 3, 1, 2])
 
-            outDim = [-1]
-            outDim.extend(size)
-            Y = tf.reshape(Y, outDim)
+                outDim = [-1, 20, 50 * 50]
+                # Y = tf.reshape(Y, outDim)
 
-        print(X.shape)
+        print("Input shape:", X.shape)
+        print("Output shape:", Y.shape)
         # print_op = tf.Print(X,[X])
 
-        # Define network
+########################################################################################################################
+
+        #########################
+        #     Define network    #
+        #########################
         with tf.name_scope('Base_Network'):
 
-            baseNetwork = trippleLayer(X)
+            baseNetwork = lstm_encode(X, batchSize=loader.batch_size)
             # baseNetwork = singleConvolution(X)
             # baseNetwork = dropout(baseNetwork)
             # baseNetwork = singleLayer(baseNetwork, outDim=32)
@@ -203,11 +232,24 @@ def main():
             # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
 
         with tf.name_scope('Prediction'):
-            num_out = 50 * 50 * loader.pred_length #loader.num_out
-            Pred = singleLayer(baseNetwork, outDim=num_out, activation=None)
-            # Pred = baseNetwork
-            Pred = tf.reshape(Pred, outDim)  # Reshape the output to be width x height x 1( (may need batch size)
-            # Pred = predNetwork
+            num_out = 50 * 50  # * loader.pred_length
+
+            Pred = lstm_decode(baseNetwork, batchSize=loader.batch_size)
+
+            # Map the enlarger network over the first axis (time)
+            Pred = tf.map_fn(lambda x: tf.layers.dense(x, num_out, activation=None, name="enlarge"), Pred)
+
+            # [20, 64, 50 * 50]       0,  1,  2,  3
+            Pred = tf.reshape(Pred, [20, -1, 50, 50])  # Reshape the output to be width x height x 1
+            # [64, 20, 50, 50]
+            Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
+
+
+########################################################################################################################
+
+        #########################
+        #      Define loss      #
+        #########################
 
         with tf.name_scope('loss'):
             predLoss = tf.losses.huber_loss(Y, Pred)
@@ -219,9 +261,9 @@ def main():
             train_step = adam.apply_gradients(grads)
 
         tf.summary.scalar("PredictiveLoss", predLoss)
-        for grad in grads:
-            tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
-            tf.summary.histogram("grad" + str(grad), grad)
+        # for grad in grads:
+        #     tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
+        #     tf.summary.histogram("grad" + str(grad), grad)
 
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
@@ -273,6 +315,9 @@ def main():
                 loss, summary = sess.run([predLoss, merged])
                 train_writer.add_summary(summary, batch)
                 print(loss, batch)
+            elif batch % summary_step == 0:
+                loss, summary = sess.run([predLoss, merged])
+                print('(', loss, batch, ')')
             else:
                 sess.run(train_step)
                 # beholder.update(sess)
