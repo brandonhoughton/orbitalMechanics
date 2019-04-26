@@ -2,10 +2,8 @@ import os
 import tensorflow as tf
 from tensorflow import keras
 from tensorboard.plugins.beholder import Beholder
-from dataLoader.turbulence import Turbulence
+from dataLoader.turbulence import Turbulence, LARGE_DATASET, TEST_DATASET_5, datasets
 import util.summaries
-
-
 J = os.path.join
 E = os.path.exists
 
@@ -139,34 +137,35 @@ def reduceEnlarge(X):
 
 
 #######################
-train_batch =   10000000
+train_batch =    1000000
 summary_step =       200
 validation_step =   2000
-checkpoint_int = 500000
-pre_train_steps = 2000
+checkpoint_int =  500000
+pre_train_steps =   2000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.004  # Learning Rate
+lr = 0.005  # Learning Rate
 #######################
 
 ########################################################################################################################
 
 net_name = 'lstm_encode_decode_w_fc'
-saveDir = os.path.join('experiments', 'turbulence')
-LOG_DIR = J('.', saveDir, net_name + '_lr' + str(lr))
+saveDir = os.path.join('experiments', 'turbulence', 'recurrent')
+
 
 ########################################################################################################################
 
-def main():
+def main(net_name=net_name, saveDir=saveDir, dataset_idx=TEST_DATASET_5):
+    LOG_DIR = J('.', saveDir, net_name + '_' + datasets[dataset_idx] + '_lr' + str(lr))
 
     # Start beholder
     beholder = Beholder(LOG_DIR)
 
     # Load data
-    loader = Turbulence(pred_length=20)
+    loader = Turbulence(pred_length=20, dataset_idx=dataset_idx)
 
     # Load data onto GPU memory - ensure network layers have GPU support
     config = tf.ConfigProto()
@@ -252,7 +251,9 @@ def main():
         #########################
 
         with tf.name_scope('loss'):
-            predLoss = tf.losses.huber_loss(Y, Pred)
+            losses = tf.losses.huber_loss(Y, Pred, reduction=tf.losses.Reduction.NONE)
+            lossOverTime = tf.reduce_mean(losses, axis=[0, 1, 2])
+            predLoss = tf.reduce_mean(lossOverTime)
             # predLoss = tf.losses.mean_squared_error(Y, Pred)
 
         with tf.name_scope('train'):
@@ -260,10 +261,22 @@ def main():
             grads = adam.compute_gradients(predLoss)
             train_step = adam.apply_gradients(grads)
 
+        tf.summary.histogram("LossHistogram", lossOverTime)
+        foo = None
+        # Generate 2D array
+        indicies = tf.expand_dims(tf.cast(tf.range(tf.shape(lossOverTime)[0], dtype=tf.int32), dtype=tf.float32), 1)
+
+        print(losses.get_shape().as_list())
+        print(lossOverTime.get_shape().as_list())
+        print(indicies.get_shape().as_list())
+
+        inverted_hist = tf.map_fn(lambda tup: tup[1] * tf.ones([tup[0] * 1000 // 100]), (lossOverTime, indicies))
+        tf.summary.histogram("LossByPredictionHorizon", tf.concat(inverted_hist))
+
         tf.summary.scalar("PredictiveLoss", predLoss)
-        # for grad in grads:
-        #     tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
-        #     tf.summary.histogram("grad" + str(grad), grad)
+        for grad in grads:
+            tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
+            tf.summary.histogram("grad" + str(grad), grad)
 
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
@@ -322,7 +335,7 @@ def main():
                 sess.run(train_step)
                 # beholder.update(sess)
 
-            if batch % validation_step == 0:
+            if batch > pre_train_steps and batch % validation_step == 0:
                 flags = dict({'testing_flag:0': True})
                 summaries = sess.run(marged_with_imgs, feed_dict=flags)
                 for summary in summaries:
