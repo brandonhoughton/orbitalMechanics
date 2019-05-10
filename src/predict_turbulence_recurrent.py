@@ -267,7 +267,7 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
             train_step = adam.apply_gradients(grads)
 
         tf.summary.histogram("LossHistogram", lossOverTime)
-        foo = None
+
         # Generate 2D array
         indicies = tf.expand_dims(tf.cast(tf.range(tf.shape(lossOverTime)[0], dtype=tf.int32), dtype=tf.float32), 1)
 
@@ -293,25 +293,25 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
             tf.summary.image('Error', Pred[:, :, :, 0:1] - Y[:, :, :, 0:1], max_outputs=5),
             tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 0:1] - Y[:, :, :, 0:1]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t5', Pred[:, :, :, 50:60], max_outputs=5),
-            tf.summary.image('Label_t5', Y[:, :, :, 50:60], max_outputs=5),
-            tf.summary.image('Error_t5', Pred[:, :, :, 50:60] - Y[:, :, :, 5:6], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t5', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 50:60] - Y[:, :, :, 50:60]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t5', Pred[:, :, :, 59:60], max_outputs=5),
+            tf.summary.image('Label_t5', Y[:, :, :, 59:60], max_outputs=5),
+            tf.summary.image('Error_t5', Pred[:, :, :, 59:60] - Y[:, :, :, 59:60], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t5', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 59:60] - Y[:, :, :, 59:60]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t10', Pred[:, :, :, 100:110], max_outputs=5),
-            tf.summary.image('Label_t10', Y[:, :, :, 100:110], max_outputs=5),
-            tf.summary.image('Error_t10', Pred[:, :, :, 100:110] - Y[:, :, :, 10:11], max_outputs=5),
+            tf.summary.image('Predicted_t10', Pred[:, :, :, 109:110], max_outputs=5),
+            tf.summary.image('Label_t10', Y[:, :, :, 109:110], max_outputs=5),
+            tf.summary.image('Error_t10', Pred[:, :, :, 109:110] - Y[:, :, :, 109:110], max_outputs=5),
             tf.summary.image('Mean Abs Error_t10', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 100:110] - Y[:, :, :, 10:11]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t15', Pred[:, :, :, 150:160], max_outputs=5),
-            tf.summary.image('Label_t15', Y[:, :, :, 150:160], max_outputs=5),
-            tf.summary.image('Error_t15', Pred[:, :, :, 150:160] - Y[:, :, :, 15:16], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t15', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 150:160] - Y[:, :, :, 150:160]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t15', Pred[:, :, :, 159:160], max_outputs=5),
+            tf.summary.image('Label_t15', Y[:, :, :, 159:160], max_outputs=5),
+            tf.summary.image('Error_t15', Pred[:, :, :, 159:160] - Y[:, :, :, 159:160], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t15', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 159:160] - Y[:, :, :, 159:160]), axis=0), axis=0), max_outputs=1),
             ##
-            tf.summary.image('Predicted_t19', Pred[:, :, :, 190:200], max_outputs=5),
-            tf.summary.image('Label_t19', Y[:, :, :, 190:200], max_outputs=5),
-            tf.summary.image('Error_t19', Pred[:, :, :, 190:200] - Y[:, :, :, 19:20], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t19', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 190:200] - Y[:, :, :, 190:200]), axis=0), axis=0), max_outputs=1)]
+            tf.summary.image('Predicted_t19', Pred[:, :, :, 199:200], max_outputs=5),
+            tf.summary.image('Label_t19', Y[:, :, :, 199:200], max_outputs=5),
+            tf.summary.image('Error_t19', Pred[:, :, :, 199:200] - Y[:, :, :, 199:200], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t19', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 199:200] - Y[:, :, :, 199:200]), axis=0), axis=0), max_outputs=1)]
 
         # Create checkpoint saver
         saver = tf.train.Saver()
