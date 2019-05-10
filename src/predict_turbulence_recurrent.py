@@ -3,40 +3,44 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorboard.plugins.beholder import Beholder
 from dataLoader.turbulence import Turbulence, LARGE_DATASET, TEST_DATASET_5, datasets
-import util.summaries
 J = os.path.join
 E = os.path.exists
 
 ## Architecures ##
 
 
-def lstm_encode(X, outDim=500, batchSize = 64):
+def lstm_encode(X, outDim=[500, 250], batchSize = 64):
     print('Input shape:', X.get_shape().as_list())
-    rnn_cell = tf.nn.rnn_cell.LSTMCell(outDim, name="encode")
+    rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
+        [tf.nn.rnn_cell.LSTMCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+    )
     initial_state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
-    print('Zero state shape:(', initial_state[0].get_shape().as_list(), ',', initial_state[1].get_shape().as_list(), ')')
+    # print('Zero state shape:(', initial_state[0].get_shape().as_list(), ',', initial_state[1].get_shape().as_list(), ')')
     output, state = tf.nn.dynamic_rnn(rnn_cell, X, initial_state=initial_state, dtype=tf.float32, time_major=True)
 
-    print('Output state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
+    # print('Output state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
 
     # We ignore the output of this layer, just need it to build an embedding
     return state
 
 
-def lstm_decode(X, outDim=500, batchSize=64, inputShape=[20, -1, 50 * 50]):
-    padded = tf.ones([20, batchSize, 50*50], dtype=tf.float32)
+def lstm_decode(X, outDim=[500, 250], batchSize=64, inputShape=[20, -1, 50 * 50]):
+    padded = tf.ones([200, batchSize, 50*50], dtype=tf.float32)
     print('Padded input shape:', padded.get_shape().as_list())
 
     state = X
     # state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
-    print('State shape:(', X[0].get_shape().as_list(), ',', X[1].get_shape().as_list(), ')')
+    # print('State shape:(', X[0].get_shape().as_list(), ',', X[1].get_shape().as_list(), ')')
     # print('Zero state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
-
-    rnn_cell = tf.nn.rnn_cell.LSTMCell(outDim, name='decode')
+    rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
+        [tf.nn.rnn_cell.LSTMCell(dim, name="decode_"  + str(idx)) for (idx, dim) in enumerate(outDim)]
+    )
     output, state = tf.nn.dynamic_rnn(rnn_cell, padded, initial_state=state, dtype=tf.float32, time_major=True)
+    print(output.get_shape().as_list())
 
     # We ignore the state, just  return the output
     return output
+
 
 def seq2seq(X, outDim= 512, outLen=10, num_layers=3):
     # Create a `layers_stacked_count` of stacked RNNs (GRU cells here).
@@ -141,7 +145,7 @@ train_batch =    1000000
 summary_step =       200
 validation_step =   2000
 checkpoint_int =  500000
-pre_train_steps =   2000
+pre_train_steps =   500
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
@@ -152,20 +156,21 @@ lr = 0.005  # Learning Rate
 
 ########################################################################################################################
 
-net_name = 'lstm_encode_decode_w_fc'
+net_name = 'encode_decode_len_200_2_recurrent_1_fc'
 saveDir = os.path.join('experiments', 'turbulence', 'recurrent')
 
 
 ########################################################################################################################
 
-def main(net_name=net_name, saveDir=saveDir, dataset_idx=TEST_DATASET_5):
+def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
     LOG_DIR = J('.', saveDir, net_name + '_' + datasets[dataset_idx] + '_lr' + str(lr))
 
     # Start beholder
     beholder = Beholder(LOG_DIR)
 
     # Load data
-    loader = Turbulence(pred_length=20, dataset_idx=dataset_idx)
+    predLength = 200
+    loader = Turbulence(pred_length=predLength, dataset_idx=dataset_idx)
 
     # Load data onto GPU memory - ensure network layers have GPU support
     config = tf.ConfigProto()
@@ -201,13 +206,13 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=TEST_DATASET_5):
                 X = tf.reshape(X, (20, -1, 50 * 50))  # Flattened for fully connected layers
 
             with tf.name_scope('Label'):
-                size = [50, 50, 20]
+                size = [50, 50, predLength]
                 Y = tf.map_fn(lambda region: tf.slice(data, region[0], size), regions, dtype=tf.float32)
 
                 # Map the label to the same time first ordering
                 # Y = tf.transpose(Y, perm=[0, 3, 1, 2])
 
-                outDim = [-1, 20, 50 * 50]
+                outDim = [-1, predLength, 50 * 50]
                 # Y = tf.reshape(Y, outDim)
 
         print("Input shape:", X.shape)
@@ -239,7 +244,7 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=TEST_DATASET_5):
             Pred = tf.map_fn(lambda x: tf.layers.dense(x, num_out, activation=None, name="enlarge"), Pred)
 
             # [20, 64, 50 * 50]       0,  1,  2,  3
-            Pred = tf.reshape(Pred, [20, -1, 50, 50])  # Reshape the output to be width x height x 1
+            Pred = tf.reshape(Pred, [predLength, -1, 50, 50])  # Reshape the output to be width x height x 1
             # [64, 20, 50, 50]
             Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
 
@@ -270,8 +275,8 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=TEST_DATASET_5):
         print(lossOverTime.get_shape().as_list())
         print(indicies.get_shape().as_list())
 
-        inverted_hist = tf.map_fn(lambda tup: tup[1] * tf.ones([tup[0] * 1000 // 100]), (lossOverTime, indicies))
-        tf.summary.histogram("LossByPredictionHorizon", tf.concat(inverted_hist))
+        # inverted_hist = tf.map_fn(lambda tup: tup[1] * tf.ones([tup[0] * 1000 // 100]), (lossOverTime, indicies))
+        # tf.summary.histogram("LossByPredictionHorizon", tf.concat(inverted_hist))
 
         tf.summary.scalar("PredictiveLoss", predLoss)
         for grad in grads:
@@ -288,25 +293,25 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=TEST_DATASET_5):
             tf.summary.image('Error', Pred[:, :, :, 0:1] - Y[:, :, :, 0:1], max_outputs=5),
             tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 0:1] - Y[:, :, :, 0:1]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t5', Pred[:, :, :, 5:6], max_outputs=5),
-            tf.summary.image('Label_t5', Y[:, :, :, 5:6], max_outputs=5),
-            tf.summary.image('Error_t5', Pred[:, :, :, 5:6] - Y[:, :, :, 5:6], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t5', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 5:6] - Y[:, :, :, 5:6]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t5', Pred[:, :, :, 50:60], max_outputs=5),
+            tf.summary.image('Label_t5', Y[:, :, :, 50:60], max_outputs=5),
+            tf.summary.image('Error_t5', Pred[:, :, :, 50:60] - Y[:, :, :, 5:6], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t5', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 50:60] - Y[:, :, :, 50:60]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t10', Pred[:, :, :, 10:11], max_outputs=5),
-            tf.summary.image('Label_t10', Y[:, :, :, 10:11], max_outputs=5),
-            tf.summary.image('Error_t10', Pred[:, :, :, 10:11] - Y[:, :, :, 10:11], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t10', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 10:11] - Y[:, :, :, 10:11]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t10', Pred[:, :, :, 100:110], max_outputs=5),
+            tf.summary.image('Label_t10', Y[:, :, :, 100:110], max_outputs=5),
+            tf.summary.image('Error_t10', Pred[:, :, :, 100:110] - Y[:, :, :, 10:11], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t10', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 100:110] - Y[:, :, :, 10:11]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t15', Pred[:, :, :, 15:16], max_outputs=5),
-            tf.summary.image('Label_t15', Y[:, :, :, 15:16], max_outputs=5),
-            tf.summary.image('Error_t15', Pred[:, :, :, 15:16] - Y[:, :, :, 15:16], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t15', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 15:16] - Y[:, :, :, 15:16]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t15', Pred[:, :, :, 150:160], max_outputs=5),
+            tf.summary.image('Label_t15', Y[:, :, :, 150:160], max_outputs=5),
+            tf.summary.image('Error_t15', Pred[:, :, :, 150:160] - Y[:, :, :, 15:16], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t15', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 150:160] - Y[:, :, :, 150:160]), axis=0), axis=0), max_outputs=1),
             ##
-            tf.summary.image('Predicted_t19', Pred[:, :, :, 19:20], max_outputs=5),
-            tf.summary.image('Label_t19', Y[:, :, :, 19:20], max_outputs=5),
-            tf.summary.image('Error_t19', Pred[:, :, :, 19:20] - Y[:, :, :, 19:20], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t19', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 19:20] - Y[:, :, :, 19:20]), axis=0), axis=0), max_outputs=1)]
+            tf.summary.image('Predicted_t19', Pred[:, :, :, 190:200], max_outputs=5),
+            tf.summary.image('Label_t19', Y[:, :, :, 190:200], max_outputs=5),
+            tf.summary.image('Error_t19', Pred[:, :, :, 190:200] - Y[:, :, :, 19:20], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t19', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 190:200] - Y[:, :, :, 190:200]), axis=0), axis=0), max_outputs=1)]
 
         # Create checkpoint saver
         saver = tf.train.Saver()
