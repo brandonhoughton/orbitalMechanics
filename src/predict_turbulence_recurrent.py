@@ -210,9 +210,9 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
                 Y = tf.map_fn(lambda region: tf.slice(data, region[0], size), regions, dtype=tf.float32)
 
                 # Map the label to the same time first ordering
-                # Y = tf.transpose(Y, perm=[0, 3, 1, 2])
+                Y = tf.transpose(Y, perm=[3, 0, 1, 2])
 
-                outDim = [-1, predLength, 50 * 50]
+                outDim = [predLength, -1, 50 * 50]
                 # Y = tf.reshape(Y, outDim)
 
         print("Input shape:", X.shape)
@@ -224,7 +224,7 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
         #########################
         #     Define network    #
         #########################
-        with tf.name_scope('Base_Network'):
+        with tf.name_scope('Encode'):
 
             baseNetwork = lstm_encode(X, batchSize=loader.batch_size)
             # baseNetwork = singleConvolution(X)
@@ -235,19 +235,33 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
             # baseNetwork = reduceEnlarge(X)
             # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
 
-        with tf.name_scope('Prediction'):
+        with tf.name_scope('Decode'):
             num_out = 50 * 50  # * loader.pred_length
 
-            Pred = lstm_decode(baseNetwork, batchSize=loader.batch_size)
+            state = lstm_decode(baseNetwork, batchSize=loader.batch_size)
+
+        with tf.name_scope('Prediction'):
 
             # Map the enlarger network over the first axis (time)
-            Pred = tf.map_fn(lambda x: tf.layers.dense(x, num_out, activation=None, name="enlarge"), Pred)
+            Pred = tf.map_fn(lambda x: tf.layers.dense(x, num_out, activation=None), state)
 
-            # [20, 64, 50 * 50]       0,  1,  2,  3
+            # [200, 64, 50 * 50]              0,  1,  2,  3
             Pred = tf.reshape(Pred, [predLength, -1, 50, 50])  # Reshape the output to be width x height x 1
-            # [64, 20, 50, 50]
-            Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
+            # [64, 200, 50, 50]
+            # Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
 
+        with tf.name_scope('Confidence'):
+
+            # Map the confidence estimation over the first axis (time)
+            # [200, 64, 500]
+            conf = tf.map_fn(lambda x: tf.layers.dense(x, 20, activation=tf.nn.elu), state)
+            # [200, 64, 20]
+            conf = tf.map_fn(lambda x: tf.layers.dense(x, 1, activation=tf.nn.elu), conf)
+            # [200, 64, 1]
+            conf = tf.squeeze
+            # [200, 64]
+
+            avg_cong = tf.reduce_mean(conf)
 
 ########################################################################################################################
 
@@ -257,31 +271,32 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
 
         with tf.name_scope('loss'):
             losses = tf.losses.huber_loss(Y, Pred, reduction=tf.losses.Reduction.NONE)
-            lossOverTime = tf.reduce_mean(losses, axis=[0, 1, 2])
-            predLoss = tf.reduce_mean(lossOverTime)
-            # predLoss = tf.losses.mean_squared_error(Y, Pred)
+            losses = tf.reduce_mean(losses, axis=[2, 3])  # Reduce image dims
+            loss_over_time = tf.reduce_mean(losses, axis=[1])  # Don't reduce time major axis
+
+            conf_losses = tf.map_fn(lambda tup:  (1-tup[1])*5 + tup[1]*(10000 * tup[0]**2), tf.stack[losses, conf])
+            conf_losses_over_time = tf.reduce_mean(conf_losses, axis=[1, 2, 3])  # Don't reduce time major axis
+
+            pred_loss = tf.reduce_mean(loss_over_time)
+            conf_weighted_loss = tf.reduce_mean(conf_losses_over_time)
 
         with tf.name_scope('train'):
             adam = tf.train.AdamOptimizer(learning_rate=lr)
-            grads = adam.compute_gradients(predLoss)
+            # grads = adam.compute_gradients(pred_loss)
+            grads = adam.compute_gradients(conf_weighted_loss)
             train_step = adam.apply_gradients(grads)
 
-        tf.summary.histogram("LossHistogram", lossOverTime)
+        tf.summary.histogram("Loss Histogram", loss_over_time)
+        tf.summary.histogram("Confidence Histogram", conf)
+        tf.summary.histogram("Weighted Histogram", conf_losses_over_time)
 
-        # Generate 2D array
-        indicies = tf.expand_dims(tf.cast(tf.range(tf.shape(lossOverTime)[0], dtype=tf.int32), dtype=tf.float32), 1)
+        tf.summary.scalar("PredictiveLoss", pred_loss)
+        tf.summary.scalar("AvgConfidence", avg_cong)
+        tf.summary.scalar("ConfWeightedLoss", conf_weighted_loss)
 
-        print(losses.get_shape().as_list())
-        print(lossOverTime.get_shape().as_list())
-        print(indicies.get_shape().as_list())
-
-        # inverted_hist = tf.map_fn(lambda tup: tup[1] * tf.ones([tup[0] * 1000 // 100]), (lossOverTime, indicies))
-        # tf.summary.histogram("LossByPredictionHorizon", tf.concat(inverted_hist))
-
-        tf.summary.scalar("PredictiveLoss", predLoss)
-        for grad in grads:
-            tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
-            tf.summary.histogram("grad" + str(grad), grad)
+        # for grad in grads:
+        #     tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
+        #     tf.summary.histogram("grad" + str(grad), grad)
 
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
@@ -293,25 +308,25 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
             tf.summary.image('Error', Pred[:, :, :, 0:1] - Y[:, :, :, 0:1], max_outputs=5),
             tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 0:1] - Y[:, :, :, 0:1]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t5', Pred[:, :, :, 59:60], max_outputs=5),
-            tf.summary.image('Label_t5', Y[:, :, :, 59:60], max_outputs=5),
-            tf.summary.image('Error_t5', Pred[:, :, :, 59:60] - Y[:, :, :, 59:60], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t5', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 59:60] - Y[:, :, :, 59:60]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t59', Pred[:, :, :, 59:60], max_outputs=5),
+            tf.summary.image('Label_t59', Y[:, :, :, 59:60], max_outputs=5),
+            tf.summary.image('Error_t59', Pred[:, :, :, 59:60] - Y[:, :, :, 59:60], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t59', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 59:60] - Y[:, :, :, 59:60]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t10', Pred[:, :, :, 109:110], max_outputs=5),
-            tf.summary.image('Label_t10', Y[:, :, :, 109:110], max_outputs=5),
-            tf.summary.image('Error_t10', Pred[:, :, :, 109:110] - Y[:, :, :, 109:110], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t10', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 100:110] - Y[:, :, :, 10:11]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t109', Pred[:, :, :, 109:110], max_outputs=5),
+            tf.summary.image('Label_t109', Y[:, :, :, 109:110], max_outputs=5),
+            tf.summary.image('Error_t109', Pred[:, :, :, 109:110] - Y[:, :, :, 109:110], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t109', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 100:110] - Y[:, :, :, 10:11]), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t15', Pred[:, :, :, 159:160], max_outputs=5),
-            tf.summary.image('Label_t15', Y[:, :, :, 159:160], max_outputs=5),
-            tf.summary.image('Error_t15', Pred[:, :, :, 159:160] - Y[:, :, :, 159:160], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t15', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 159:160] - Y[:, :, :, 159:160]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t159', Pred[:, :, :, 159:160], max_outputs=5),
+            tf.summary.image('Label_t159', Y[:, :, :, 159:160], max_outputs=5),
+            tf.summary.image('Error_t159', Pred[:, :, :, 159:160] - Y[:, :, :, 159:160], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t159', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 159:160] - Y[:, :, :, 159:160]), axis=0), axis=0), max_outputs=1),
             ##
-            tf.summary.image('Predicted_t19', Pred[:, :, :, 199:200], max_outputs=5),
-            tf.summary.image('Label_t19', Y[:, :, :, 199:200], max_outputs=5),
-            tf.summary.image('Error_t19', Pred[:, :, :, 199:200] - Y[:, :, :, 199:200], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t19', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 199:200] - Y[:, :, :, 199:200]), axis=0), axis=0), max_outputs=1)]
+            tf.summary.image('Predicted_t199', Pred[:, :, :, 199:200], max_outputs=5),
+            tf.summary.image('Label_t199', Y[:, :, :, 199:200], max_outputs=5),
+            tf.summary.image('Error_t199', Pred[:, :, :, 199:200] - Y[:, :, :, 199:200], max_outputs=5),
+            tf.summary.image('Mean Abs Error_t199', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 199:200] - Y[:, :, :, 199:200]), axis=0), axis=0), max_outputs=1)]
 
         # Create checkpoint saver
         saver = tf.train.Saver()
@@ -330,12 +345,12 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
         # Train model
         for batch in range(train_batch + 1):
             if batch > pre_train_steps and batch % summary_step == 0:
-                loss, summary = sess.run([predLoss, merged])
+                loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
                 train_writer.add_summary(summary, batch)
-                print(loss, batch)
+                print(loss, confidence, batch)
             elif batch % summary_step == 0:
-                loss, summary = sess.run([predLoss, merged])
-                print('(', loss, batch, ')')
+                loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
+                print('(', loss, confidence, batch, ')')
             else:
                 sess.run(train_step)
                 # beholder.update(sess)
