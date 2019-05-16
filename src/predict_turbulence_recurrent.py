@@ -156,7 +156,7 @@ lr = 0.005  # Learning Rate
 
 ########################################################################################################################
 
-net_name = 'encode_decode_len_200_2_recurrent_1_fc'
+net_name = 'test_conf'
 saveDir = os.path.join('experiments', 'turbulence', 'recurrent')
 
 
@@ -258,7 +258,7 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
             # [200, 64, 20]
             conf = tf.map_fn(lambda x: tf.layers.dense(x, 1, activation=tf.nn.elu), conf)
             # [200, 64, 1]
-            conf = tf.squeeze
+            conf = tf.squeeze(conf)
             # [200, 64]
 
             avg_cong = tf.reduce_mean(conf)
