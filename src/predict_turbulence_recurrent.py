@@ -16,7 +16,7 @@ def lstm_encode(X, outDim=[500, 250], batchSize = 64):
     )
     initial_state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
     # print('Zero state shape:(', initial_state[0].get_shape().as_list(), ',', initial_state[1].get_shape().as_list(), ')')
-    output, state = tf.nn.dynamic_rnn(rnn_cell, X, initial_state=initial_state, dtype=tf.float32, time_major=True)
+    output, state = tf.nn.dynamic_rnn(rnn_cell, X, initial_state=initial_state, dtype=tf.float32, time_major=True, parallel_iterations=64)
 
     # print('Output state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
 
@@ -35,7 +35,7 @@ def lstm_decode(X, outDim=[500, 250], batchSize=64, inputShape=[20, -1, 50 * 50]
     rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
         [tf.nn.rnn_cell.LSTMCell(dim, name="decode_"  + str(idx)) for (idx, dim) in enumerate(outDim)]
     )
-    output, state = tf.nn.dynamic_rnn(rnn_cell, padded, initial_state=state, dtype=tf.float32, time_major=True)
+    output, state = tf.nn.dynamic_rnn(rnn_cell, padded, initial_state=state, dtype=tf.float32, time_major=True, parallel_iterations=64)
     print(output.get_shape().as_list())
 
     # We ignore the state, just  return the output
@@ -156,7 +156,7 @@ lr = 0.005  # Learning Rate
 
 ########################################################################################################################
 
-net_name = 'test_conf'
+net_name = 'elu_activation_on_conf'
 saveDir = os.path.join('experiments', 'turbulence', 'recurrent')
 
 
@@ -247,7 +247,7 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
 
             # [200, 64, 50 * 50]              0,  1,  2,  3
             Pred = tf.reshape(Pred, [predLength, -1, 50, 50])  # Reshape the output to be width x height x 1
-            # [64, 200, 50, 50]
+            # [200, 64, 50, 50]
             # Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
 
         with tf.name_scope('Confidence'):
@@ -274,8 +274,8 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
             losses = tf.reduce_mean(losses, axis=[2, 3])  # Reduce image dims
             loss_over_time = tf.reduce_mean(losses, axis=[1])  # Don't reduce time major axis
 
-            conf_losses = tf.map_fn(lambda tup:  (1-tup[1])*5 + tup[1]*(10000 * tup[0]**2), tf.stack[losses, conf])
-            conf_losses_over_time = tf.reduce_mean(conf_losses, axis=[1, 2, 3])  # Don't reduce time major axis
+            conf_losses = tf.map_fn(lambda s: (1-s[0])*1 + abs(s[0])*(1000000 * s[1]**2), tf.stack([conf, losses]))
+            conf_losses_over_time = tf.reduce_mean(conf_losses, axis=[1])  # Don't reduce time major axis
 
             pred_loss = tf.reduce_mean(loss_over_time)
             conf_weighted_loss = tf.reduce_mean(conf_losses_over_time)
@@ -303,30 +303,30 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
 
         marged_with_imgs = \
             [merged,
-            tf.summary.image('Predicted_t0', Pred[:, :, :, 0:1], max_outputs=5),
-            tf.summary.image('Label', Y[:, :, :, 0:1], max_outputs=5),
-            tf.summary.image('Error', Pred[:, :, :, 0:1] - Y[:, :, :, 0:1], max_outputs=5),
-            tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 0:1] - Y[:, :, :, 0:1]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t0', tf.expand_dims(Pred[0, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Label', tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Error', tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1)), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t59', Pred[:, :, :, 59:60], max_outputs=5),
-            tf.summary.image('Label_t59', Y[:, :, :, 59:60], max_outputs=5),
-            tf.summary.image('Error_t59', Pred[:, :, :, 59:60] - Y[:, :, :, 59:60], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t59', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 59:60] - Y[:, :, :, 59:60]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t59', tf.expand_dims(Pred[59, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Label_t59', tf.expand_dims(Y[59, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Error_t59', tf.expand_dims(Pred[59, :, :, :], axis=-1) - tf.expand_dims(Y[59, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Mean Abs Error_t59', tf.expand_dims(tf.reduce_mean(abs(tf.expand_dims(Pred[59, :, :, :], axis=-1) - tf.expand_dims(Y[59, :, :, :], axis=-1)), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t109', Pred[:, :, :, 109:110], max_outputs=5),
-            tf.summary.image('Label_t109', Y[:, :, :, 109:110], max_outputs=5),
-            tf.summary.image('Error_t109', Pred[:, :, :, 109:110] - Y[:, :, :, 109:110], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t109', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 100:110] - Y[:, :, :, 10:11]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t109', tf.expand_dims(Pred[109, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Label_t109', tf.expand_dims(Y[109, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Error_t109', tf.expand_dims(Pred[109, :, :, :], axis=-1) - tf.expand_dims(Y[109, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Mean Abs Error_t109', tf.expand_dims(tf.reduce_mean(abs(tf.expand_dims(Pred[100, :, :, :], axis=-1) - tf.expand_dims(Y[10, :, :, :], axis=-1)), axis=0), axis=0), max_outputs=1),
              ##
-            tf.summary.image('Predicted_t159', Pred[:, :, :, 159:160], max_outputs=5),
-            tf.summary.image('Label_t159', Y[:, :, :, 159:160], max_outputs=5),
-            tf.summary.image('Error_t159', Pred[:, :, :, 159:160] - Y[:, :, :, 159:160], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t159', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 159:160] - Y[:, :, :, 159:160]), axis=0), axis=0), max_outputs=1),
+            tf.summary.image('Predicted_t159', tf.expand_dims(Pred[159, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Label_t159', tf.expand_dims(Y[159, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Error_t159', tf.expand_dims(Pred[159, :, :, :], axis=-1) - tf.expand_dims(Y[159, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Mean Abs Error_t159', tf.expand_dims(tf.reduce_mean(abs(tf.expand_dims(Pred[159, :, :, :], axis=-1) - tf.expand_dims(Y[159, :, :, :], axis=-1)), axis=0), axis=0), max_outputs=1),
             ##
-            tf.summary.image('Predicted_t199', Pred[:, :, :, 199:200], max_outputs=5),
-            tf.summary.image('Label_t199', Y[:, :, :, 199:200], max_outputs=5),
-            tf.summary.image('Error_t199', Pred[:, :, :, 199:200] - Y[:, :, :, 199:200], max_outputs=5),
-            tf.summary.image('Mean Abs Error_t199', tf.expand_dims(tf.reduce_mean(abs(Pred[:, :, :, 199:200] - Y[:, :, :, 199:200]), axis=0), axis=0), max_outputs=1)]
+            tf.summary.image('Predicted_t199', tf.expand_dims(Pred[199, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Label_t199', tf.expand_dims(Y[199, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Error_t199', tf.expand_dims(Pred[199, :, :, :], axis=-1) - tf.expand_dims(Y[199, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Mean Abs Error_t199', tf.expand_dims(tf.reduce_mean(abs(tf.expand_dims(Pred[199, :, :, :], axis=-1) - tf.expand_dims(Y[199, :, :, :], axis=-1)), axis=0), axis=0), max_outputs=1)]
 
         # Create checkpoint saver
         saver = tf.train.Saver()
@@ -356,6 +356,7 @@ def main(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET):
                 # beholder.update(sess)
 
             if batch > pre_train_steps and batch % validation_step == 0:
+            # if  batch % validation_step == 0:
                 flags = dict({'testing_flag:0': True})
                 summaries = sess.run(marged_with_imgs, feed_dict=flags)
                 for summary in summaries:

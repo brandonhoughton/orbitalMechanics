@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "C:\\Users\\brand\\AppData\\Local\\Programs\\Python\\Python37\\python.exe",
+    "python.pythonPath": "C:\\Python\\Python36\\python.exe",
     "python.linting.pylintEnabled": true,
     "python.dataScience.jupyterServerURI": "http://router.sneakywines.me:8888/?token=785ccf1182a51c756a0d07bd0cbc4b4152d4b765d1e891b7"
 }
