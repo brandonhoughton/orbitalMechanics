@@ -76,11 +76,13 @@ def make_iterator(dataset, num_windows, batch_size):
             .make_one_shot_iterator() \
             .get_next()
 
+
 def make_iterator_no_shuffle(dataset, batch_size):
     return dataset.batch(batch_size) \
             .prefetch(1) \
             .make_one_shot_iterator() \
             .get_next()
+
 
 def make_rectangles(location, window_size):
     new_location = location.copy()
@@ -94,28 +96,44 @@ def make_rectangles(location, window_size):
     label_size[-1] = 1
     return np.stack([location, window_size, new_location, label_size])
 
+
 # Fist pass - just load 3d sections of turbulence data and train/test split them
 # Sequence to frame model
-class Turbulence():
+class Turbulence:
 
+    def __init__(self, batch_size=64, patch_size=50, window_size=20, num_windows=50000, pred_length=20,
+                 dataset_idx=LARGE_DATASET, input_noise=None, debug=False):
+        """
 
-    def __init__(self, batch_size=64, window_size=[50, 50, 20], num_windows=50000, pred_length=20, dataset_idx=LARGE_DATASET):
+        :param batch_size: Number of samples per batch
+        :param patch_size: Width and height of patch
+        :param window_size: Number of frames of history given as input
+        :param num_windows: Number of random patches
+        :param pred_length: Number of predicted frames
+        :param dataset_idx: Enum representing which dataset to load
+        :param noise: Fixed noise array to add to input - must be the same shape as data
+        :param debug: Whether or not to print shapes and sizes while loading the data
+        """
         self.datasets = datasets
+        self.noise = input_noise
         self.batch_size = batch_size
         # For small memory machines - just load the needed array rather than the whole .mat file
         self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[dataset_idx]))['U_t']
         self.shape = self.data.shape
-        print('shape:', self.shape)
+        if debug:
+            print('shape:', self.shape)
 
         self.pred_length = pred_length
-        window_size[-1] += self.pred_length
-        print('window_size', window_size)
+        window_shape = [patch_size, patch_size, window_size]
+        window_shape[-1] += self.pred_length
+        if debug:
+            print('window_shape', window_shape)
 
         # Define sub-sets of turbulent data
         low = [0 for _ in self.shape]
-        high = [x - size for (x, size) in zip(self.shape, window_size)]
+        high = [x - size for (x, size) in zip(self.shape, window_shape)]
 
-        self.input_size = window_size.copy()
+        self.input_size = window_shape.copy()
         self.input_size[-1] -= self.pred_length
         self.test_size = [-1]
         self.test_size.extend(self.input_size.copy())
@@ -123,25 +141,22 @@ class Turbulence():
         self.num_out = 1
         self.num_test = batch_size
 
-        print('inpurt size', self.input_size)
-        print('test size', self.test_size)
+        if debug:
+            print('x size', self.input_size)
+            print('y size', self.test_size)
 
-
-        # predict patch
-        # for d in self.test_size:
-        #     self.num_out *= abs(d)
-        # predict entire img
         for d in self.shape[:-1]:
             self.num_out *= abs(d)
-        print(self.num_out)
+        if debug:
+            print("Number of parameter per sample of y:", self.num_out)
 
         np.random.seed(RANDOM_SEED)
         locations = np.random.uniform(low, high, size=(num_windows, len(high))).astype(np.int32)
         regions = np.apply_along_axis(
                     lambda location: make_rectangles(location, self.input_size), -1, locations)
-        print(regions[0])
+        if debug:
+            print("Example region:", regions[0])
         regions = tf.data.Dataset.from_tensor_slices(regions)
-                
 
         # Make regions out of points
         # e.g. [[u, v, t],[width, height, length]]
@@ -157,7 +172,7 @@ class Turbulence():
         self.inputs = {
             'train_regions' : train_regions,    
             'test_regions'  : test_regions,
-            'window_size'   : window_size
+            'window_size'   : window_shape
         }
 
         # with tf.Session() as sess:
@@ -193,8 +208,14 @@ class Turbulence():
             tf.map_fn(lambda region: Turbulence.slice_label(data, region), regions, dtype=tf.float32)
 
     def get_data(self):
-        return self.data
+        # Scale data from [0, 1]
+        dmin = np.min(self.data)
+        dmax = np.max(self.data)
+        return (self.data - dmin) / (dmax - dmin)
         # return self.data['U_t']
+
+    def get_input_noise(self):
+        return self.noise
 
     def get_train_regions(self, session):
         session.run(self.get_train_region_batch)
