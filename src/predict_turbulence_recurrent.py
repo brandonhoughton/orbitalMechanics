@@ -11,11 +11,11 @@ E = os.path.exists
 
 
 def lstm_encode(X, outDim=[250, 250, 250], batchSize = 64):
-    print('Input shape:', X.get_shape().as_list())
+    print('Encoder input shape:', X.get_shape().as_list())
     rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
-        # [tf.nn.rnn_cell.LSTMCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        [tf.nn.rnn_cell.LSTMCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
         # [tf.nn.rnn_cell.BasicRNNCell(dim, name="encode_" + str(idx), activation=None) for (idx, dim) in enumerate(outDim)]
-        [tf.nn.rnn_cell.GRUCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        # [tf.nn.rnn_cell.GRUCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
     )
     initial_state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
     # print('Zero state shape:(', initial_state[0].get_shape().as_list(), ',', initial_state[1].get_shape().as_list(), ')')
@@ -36,8 +36,8 @@ def lstm_decode(X, outDim=[250, 250, 250], batchSize=64, pred_length=200, inputS
     # print('State shape:(', X[0].get_shape().as_list(), ',', X[1].get_shape().as_list(), ')')
     # print('Zero state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
     rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
-        [tf.nn.rnn_cell.GRUCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
-        # [tf.nn.rnn_cell.LSTMCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        # [tf.nn.rnn_cell.GRUCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        [tf.nn.rnn_cell.LSTMCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
         # [tf.nn.rnn_cell.BasicRNNCell(dim, name="decode_" + str(idx), activation=None) for (idx, dim) in enumerate(outDim)]
     )
     output, state = tf.nn.dynamic_rnn(rnn_cell, padded, initial_state=state, dtype=tf.float32, time_major=True, parallel_iterations=64)
@@ -55,7 +55,7 @@ def seq2seq(X, outDim= 512, outLen=10, num_layers=3):
             cells.append(tf.nn.rnn_cell.GRUCell(outDim))
             # cells.append(tf.nn.rnn_cell.BasicLSTMCell(...))
     cell = tf.nn.rnn_cell.MultiRNNCell(cells)
-    decoder_inputs = [ tf.zeros_like(X[0], dtype=tf.float32, name="GO")] + X[:-1]
+    decoder_inputs = [tf.zeros_like(X[0], dtype=tf.float32, name="GO")] + X[:-1]
     dec_outputs, dec_memory = tf.contrib.legacy_seq2seq.basic_rnn_seq2seq(
         X,
         decoder_inputs,
@@ -153,6 +153,7 @@ summary_step =       200
 validation_step =   2000
 checkpoint_int =   20000
 pre_train_steps =    500
+save_pred_steps =  10000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
@@ -323,14 +324,14 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
 
-        # marged_with_imgs = \
-        #     [merged,
-        #     tf.summary.image('Predicted_t0', tf.expand_dims(Pred[0, :, :, :], axis=-1), max_outputs=5),
-        #     tf.summary.image('Label', tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
-        #     tf.summary.image('Error', tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
-        #     tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1)), axis=0), axis=0), max_outputs=1),
-        #      # ##
-        #      # ]
+        merged_with_imgs = \
+            [merged,
+            tf.summary.image('Predicted_t0', tf.expand_dims(Pred[0, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Label', tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Error', tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
+            tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1)), axis=0), axis=0), max_outputs=1),
+             # ##
+             ]
         #     tf.summary.image('Predicted_t59', tf.expand_dims(Pred[59, :, :, :], axis=-1), max_outputs=5),
         #     tf.summary.image('Label_t59', tf.expand_dims(Y[59, :, :, :], axis=-1), max_outputs=5),
         #     tf.summary.image('Error_t59', tf.expand_dims(Pred[59, :, :, :], axis=-1) - tf.expand_dims(Y[59, :, :, :], axis=-1), max_outputs=5),
@@ -355,6 +356,7 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
         saver = tf.train.Saver()
 
         sess.run(tf.global_variables_initializer())
+        validation_accuracy = dict()
 
         # sess.run(print_op)
 
@@ -366,30 +368,41 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
             J(LOG_DIR, 'validation'), sess.graph)
 
         # Train model
-        for batch in range(num_batches + 1):
-            if batch > pre_train_steps and batch % summary_step == 0:
-                loss, summary = sess.run([pred_loss, merged])
-                # loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
-                train_writer.add_summary(summary, batch)
-                print(loss, batch)
-            elif batch % summary_step == 0:
-                loss, summary = sess.run([pred_loss, merged])
-                # loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
-                print('(', loss, batch, ')')
-            else:
-                sess.run(train_step)
-                # beholder.update(sess)
+        try:
+            for batch in range(num_batches + 1):
+                if batch > pre_train_steps and batch % summary_step == 0:
+                    loss, summary = sess.run([pred_loss, merged])
+                    # loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
+                    train_writer.add_summary(summary, batch)
+                    print(loss, batch)
+                elif batch % summary_step == 0:
+                    loss, summary = sess.run([pred_loss, merged])
+                    # loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
+                    print('(', loss, batch, ')')
+                else:
+                    sess.run(train_step)
+                    # beholder.update(sess)
 
-            # if  batch % validation_step == 0:
-            if batch > pre_train_steps and batch % validation_step == 0:
-                flags = dict({'testing_flag:0': True})
-                summaries = sess.run(merged, feed_dict=flags)
-                # summaries = sess.run(marged_with_imgs, feed_dict=flags)
-                for summary in summaries:
-                    test_writer.add_summary(summary, batch)
+                if batch > pre_train_steps and batch % save_pred_steps == 0:
+                    flags = dict({'testing_flag:0': True})
+                    summaries, prediction, accuracy = sess.run([merged, Pred, pred_loss], feed_dict=flags)
+                    for summary in summaries:
+                        test_writer.add_summary(summary, batch)
+                    np.save(J(LOG_DIR, 'pred_{}_{}.npy'.format(batch, accuracy)))
 
-            if batch % checkpoint_int == 0:
-                saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch)))
+                if batch > pre_train_steps and batch % validation_step == 0:
+                    flags = dict({'testing_flag:0': True})
+                    summaries, accuracy = sess.run([merged_with_imgs, loss_over_time], feed_dict=flags)
+                    for summary in summaries:
+                        test_writer.add_summary(summary, batch)
+                    validation_accuracy[batch] = accuracy
+
+                if batch % checkpoint_int == 0:
+                    saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch)))
+        finally:
+            np.save(J(LOG_DIR, 'pred_{}_{}.npy'.format(batch, validation_accuracy)))
+
 
 if __name__ == "__main__":
+    os.chdir("..")
     train()
