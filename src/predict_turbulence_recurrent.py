@@ -1,3 +1,4 @@
+import json
 import os
 import tensorflow as tf
 import numpy as np
@@ -152,8 +153,8 @@ train_batch =     100000
 summary_step =       200
 validation_step =   2000
 checkpoint_int =   20000
-pre_train_steps =    500
-save_pred_steps =  10000
+pre_train_steps =    0 #500
+save_pred_steps =  200 # 10000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
@@ -385,10 +386,11 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
 
                 if batch > pre_train_steps and batch % save_pred_steps == 0:
                     flags = dict({'testing_flag:0': True})
-                    summaries, prediction, accuracy = sess.run([merged, Pred, pred_loss], feed_dict=flags)
+                    summaries, prediction, label, accuracy = sess.run([merged_with_imgs, Pred, Y, pred_loss], feed_dict=flags)
                     for summary in summaries:
                         test_writer.add_summary(summary, batch)
-                    np.save(J(LOG_DIR, 'pred_{}_{}.npy'.format(batch, accuracy)))
+                    np.save(J(LOG_DIR, 'pred_{}_{}.npy'.format(batch, accuracy)), prediction)
+                    np.save(J(LOG_DIR, 'label_{}_{}.npy'.format(batch, accuracy)), label)
 
                 if batch > pre_train_steps and batch % validation_step == 0:
                     flags = dict({'testing_flag:0': True})
@@ -400,7 +402,9 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
                 if batch % checkpoint_int == 0:
                     saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch)))
         finally:
-            np.save(J(LOG_DIR, 'pred_{}_{}.npy'.format(batch, validation_accuracy)))
+            acc_json = json.dumps(validation_accuracy)
+            with open(J(LOG_DIR, 'validation_accuracy_by_time.npy'), "w") as f:
+                f.write(acc_json)
 
 
 if __name__ == "__main__":
