@@ -150,11 +150,11 @@ def reduceEnlarge(X):
 
 #######################
 train_batch =     100000
-summary_step =       200
-validation_step =   2000
+summary_step =     20 #  200
+validation_step =   20 # 2000
 checkpoint_int =   20000
-pre_train_steps =    0 #500
-save_pred_steps =  200 # 10000
+pre_train_steps =  0 #  500
+save_pred_steps =  20 # 10000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
@@ -166,7 +166,7 @@ lr = 0.0005  # Learning Rate
 ########################################################################################################################
 
 net_name = 'gru_predict_3_cells_200_low_lr'
-saveDir = os.path.join('experiments', 'turbulence', 'recurrent_mse')
+saveDir = os.path.join('experiments', 'turbulence', 'recurrent_scaled_mse')
 
 
 ########################################################################################################################
@@ -207,7 +207,7 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
 
                 # Get any input noise if present
                 noise = tf.constant(dtype=tf.float32, value=loader.get_input_noise())
-                if noise != None:
+                if noise is not None:
                     input_data = data + noise
                 else:
                     input_data = data
@@ -357,7 +357,11 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
         saver = tf.train.Saver()
 
         sess.run(tf.global_variables_initializer())
+        train_accuracy = dict()
         validation_accuracy = dict()
+        input_sequences = dict()
+        predicted_sequences = dict()
+        label_sequences = dict()
 
         # sess.run(print_op)
 
@@ -372,9 +376,10 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
         try:
             for batch in range(num_batches + 1):
                 if batch > pre_train_steps and batch % summary_step == 0:
-                    loss, summary = sess.run([pred_loss, merged])
+                    loss, summary, accuracy = sess.run([pred_loss, merged, loss_over_time])
                     # loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
                     train_writer.add_summary(summary, batch)
+                    train_accuracy[str(batch)] = accuracy
                     print(loss, batch)
                 elif batch % summary_step == 0:
                     loss, summary = sess.run([pred_loss, merged])
@@ -386,25 +391,27 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
 
                 if batch > pre_train_steps and batch % save_pred_steps == 0:
                     flags = dict({'testing_flag:0': True})
-                    summaries, prediction, label, accuracy = sess.run([merged_with_imgs, Pred, Y, pred_loss], feed_dict=flags)
+                    summaries, prediction, label, input_with_noise, accuracy = sess.run([merged_with_imgs, Pred, Y, X, pred_loss], feed_dict=flags)
                     for summary in summaries:
                         test_writer.add_summary(summary, batch)
-                    np.save(J(LOG_DIR, 'pred_{}_{}.npy'.format(batch, accuracy)), prediction)
-                    np.save(J(LOG_DIR, 'label_{}_{}.npy'.format(batch, accuracy)), label)
+                    input_sequences[str(batch)] = input_with_noise
+                    predicted_sequences[str(batch)] = prediction
+                    label_sequences[str(batch)] = label
 
                 if batch > pre_train_steps and batch % validation_step == 0:
                     flags = dict({'testing_flag:0': True})
                     summaries, accuracy = sess.run([merged_with_imgs, loss_over_time], feed_dict=flags)
                     for summary in summaries:
                         test_writer.add_summary(summary, batch)
-                    validation_accuracy[batch] = accuracy
+                    validation_accuracy[str(batch)] = accuracy
 
                 if batch % checkpoint_int == 0:
                     saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch)))
         finally:
-            acc_json = json.dumps(validation_accuracy)
-            with open(J(LOG_DIR, 'validation_accuracy_by_time.npy'), "w") as f:
-                f.write(acc_json)
+            np.savez_compressed(J(LOG_DIR, 'train_accuracy_by_time'), *train_accuracy)
+            np.savez_compressed(J(LOG_DIR, 'validation_accuracy_by_time'), *validation_accuracy)
+            np.savez_compressed(J(LOG_DIR, 'predictions'), *validation_accuracy)
+            np.savez_compressed(J(LOG_DIR, 'labels'), *validation_accuracy)
 
 
 if __name__ == "__main__":
