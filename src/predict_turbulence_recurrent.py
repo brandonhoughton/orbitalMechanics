@@ -150,11 +150,11 @@ def reduceEnlarge(X):
 
 #######################
 train_batch =     100000
-summary_step =     20 #  200
-validation_step =   20 # 2000
+summary_step =     500
+validation_step =   500
 checkpoint_int =   20000
-pre_train_steps =  0 #  500
-save_pred_steps =  20 # 10000
+pre_train_steps =  500
+save_pred_steps =  10000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
@@ -394,16 +394,16 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
                     summaries, prediction, label, input_with_noise, accuracy = sess.run([merged_with_imgs, Pred, Y, X, pred_loss], feed_dict=flags)
                     for summary in summaries:
                         test_writer.add_summary(summary, batch)
-                    input_sequences[batch] = np.array(input_with_noise)
-                    predicted_sequences[batch] = np.array(prediction)
-                    label_sequences[batch] = np.array(label)
+                    input_sequences[str(batch)] = np.array(input_with_noise)
+                    predicted_sequences[str(batch)] = np.array(prediction)
+                    label_sequences[str(batch)] = np.array(label)
 
                 if batch > pre_train_steps and batch % validation_step == 0:
                     flags = dict({'testing_flag:0': True})
                     summaries, accuracy = sess.run([merged_with_imgs, loss_over_time], feed_dict=flags)
                     for summary in summaries:
                         test_writer.add_summary(summary, batch)
-                    validation_accuracy[batch] = np.array(accuracy)
+                    validation_accuracy[str(batch)] = np.array(accuracy)
 
                 if batch % checkpoint_int == 0:
                     saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch)))
@@ -412,6 +412,7 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
             np.savez_compressed(J(LOG_DIR, 'validation_accuracy_by_time'), **validation_accuracy)
             np.savez_compressed(J(LOG_DIR, 'predictions'), **predicted_sequences)
             np.savez_compressed(J(LOG_DIR, 'labels'), **label_sequences)
+            np.savez_compressed(J(LOG_DIR, 'inputs'), **input_sequences)
 
 
 if __name__ == "__main__":
