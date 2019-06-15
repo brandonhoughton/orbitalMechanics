@@ -394,24 +394,24 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
                     summaries, prediction, label, input_with_noise, accuracy = sess.run([merged_with_imgs, Pred, Y, X, pred_loss], feed_dict=flags)
                     for summary in summaries:
                         test_writer.add_summary(summary, batch)
-                    input_sequences[str(batch)] = input_with_noise
-                    predicted_sequences[str(batch)] = prediction
-                    label_sequences[str(batch)] = label
+                    input_sequences[batch] = np.array(input_with_noise)
+                    predicted_sequences[batch] = np.array(prediction)
+                    label_sequences[batch] = np.array(label)
 
                 if batch > pre_train_steps and batch % validation_step == 0:
                     flags = dict({'testing_flag:0': True})
                     summaries, accuracy = sess.run([merged_with_imgs, loss_over_time], feed_dict=flags)
                     for summary in summaries:
                         test_writer.add_summary(summary, batch)
-                    validation_accuracy[str(batch)] = accuracy
+                    validation_accuracy[batch] = np.array(accuracy)
 
                 if batch % checkpoint_int == 0:
                     saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch)))
         finally:
-            np.savez_compressed(J(LOG_DIR, 'train_accuracy_by_time'), *train_accuracy)
-            np.savez_compressed(J(LOG_DIR, 'validation_accuracy_by_time'), *validation_accuracy)
-            np.savez_compressed(J(LOG_DIR, 'predictions'), *validation_accuracy)
-            np.savez_compressed(J(LOG_DIR, 'labels'), *validation_accuracy)
+            np.savez_compressed(J(LOG_DIR, 'train_accuracy_by_time'), **train_accuracy)
+            np.savez_compressed(J(LOG_DIR, 'validation_accuracy_by_time'), **validation_accuracy)
+            np.savez_compressed(J(LOG_DIR, 'predictions'), **predicted_sequences)
+            np.savez_compressed(J(LOG_DIR, 'labels'), **label_sequences)
 
 
 if __name__ == "__main__":
