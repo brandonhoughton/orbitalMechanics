@@ -2,6 +2,7 @@ import json
 import os
 import tensorflow as tf
 import numpy as np
+from pyglet.input.evdev import input_absinfo
 from tensorflow import keras
 from tensorboard.plugins.beholder import Beholder
 from src.dataLoader.turbulence import Turbulence, LARGE_DATASET, TEST_DATASET_5, datasets
@@ -171,7 +172,8 @@ saveDir = os.path.join('experiments', 'turbulence', 'recurrent_scaled_mse')
 
 ########################################################################################################################
 
-def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=None, num_batches=train_batch):
+def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=None, num_batches=train_batch,
+          pixel_dropout=None):
     LOG_DIR = J('.', saveDir, net_name + '_' + datasets[dataset_idx] + '_lr' + str(lr))
 
     # Start beholder
@@ -211,6 +213,10 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
                     input_data = data + noise
                 else:
                     input_data = data
+
+                # Handle dropout if present
+                if pixel_dropout is not None:
+                    input_data = tf.layers.dropout(input_data, rate=pixel_dropout)
 
 ########################################################################################################################
 
