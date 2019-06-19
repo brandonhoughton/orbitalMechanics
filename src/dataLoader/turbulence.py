@@ -86,15 +86,9 @@ def make_iterator_no_shuffle(dataset, batch_size):
 
 def make_rectangles(location, window_size):
     new_location = location.copy()
-
-    # Make label entire image
-    new_location[0] = 0
-    new_location[1] = 0
-
     new_location[-1] += window_size[-1]
-    label_size = window_size.copy()
-    label_size[-1] = 1
-    return np.stack([location, window_size, new_location, label_size])
+
+    return np.stack([location, new_location])
 
 
 # Fist pass - just load 3d sections of turbulence data and train/test split them

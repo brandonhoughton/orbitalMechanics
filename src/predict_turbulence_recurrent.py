@@ -11,12 +11,12 @@ E = os.path.exists
 ## Architecures ##
 
 
-def lstm_encode(X, outDim=[250, 250, 250], batchSize = 64):
+def lstm_encode(X, outDim=[250, 125, 125, 125, 250], batchSize = 64):
     print('Encoder input shape:', X.get_shape().as_list())
     rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
-        [tf.nn.rnn_cell.LSTMCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        # [tf.nn.rnn_cell.LSTMCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
         # [tf.nn.rnn_cell.BasicRNNCell(dim, name="encode_" + str(idx), activation=None) for (idx, dim) in enumerate(outDim)]
-        # [tf.nn.rnn_cell.GRUCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        [tf.nn.rnn_cell.GRUCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
     )
     initial_state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
     # print('Zero state shape:(', initial_state[0].get_shape().as_list(), ',', initial_state[1].get_shape().as_list(), ')')
@@ -28,7 +28,7 @@ def lstm_encode(X, outDim=[250, 250, 250], batchSize = 64):
     return state
 
 
-def lstm_decode(X, outDim=[250, 250, 250], batchSize=64, pred_length=200, inputShape=[20, -1, 50 * 50]):
+def lstm_decode(X, outDim=[250, 125, 125, 125, 250], batchSize=64, pred_length=200, inputShape=[20, -1, 50 * 50]):
     padded = tf.ones([pred_length, batchSize, 50*50], dtype=tf.float32)
     print('Padded input shape:', padded.get_shape().as_list())
 
@@ -37,8 +37,8 @@ def lstm_decode(X, outDim=[250, 250, 250], batchSize=64, pred_length=200, inputS
     # print('State shape:(', X[0].get_shape().as_list(), ',', X[1].get_shape().as_list(), ')')
     # print('Zero state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
     rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
-        # [tf.nn.rnn_cell.GRUCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
-        [tf.nn.rnn_cell.LSTMCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        [tf.nn.rnn_cell.GRUCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        # [tf.nn.rnn_cell.LSTMCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
         # [tf.nn.rnn_cell.BasicRNNCell(dim, name="decode_" + str(idx), activation=None) for (idx, dim) in enumerate(outDim)]
     )
     output, state = tf.nn.dynamic_rnn(rnn_cell, padded, initial_state=state, dtype=tf.float32, time_major=True, parallel_iterations=64)
@@ -160,12 +160,12 @@ use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.0005  # Learning Rate
+lr = 0.0001  # Learning Rate
 #######################
 
 ########################################################################################################################
 
-net_name = 'gru_predict_3_cells_200_low_lr'
+net_name = None # 'gru_predict_3_cells_200_low_lr'
 saveDir = os.path.join('experiments', 'turbulence', 'recurrent_scaled_mse')
 
 
@@ -231,7 +231,7 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
 
             with tf.name_scope('Label'):
                 size = [50, 50, pred_length]
-                Y = tf.map_fn(lambda region: tf.slice(data, region[2], size), regions, dtype=tf.float32)
+                Y = tf.map_fn(lambda region: tf.slice(data, region[1], size), regions, dtype=tf.float32)
 
                 # Map the label to the same time first ordering
                 Y = tf.transpose(Y, perm=[3, 0, 1, 2])
