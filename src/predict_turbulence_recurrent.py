@@ -2,7 +2,6 @@ import json
 import os
 import tensorflow as tf
 import numpy as np
-from pyglet.input.evdev import input_absinfo
 from tensorflow import keras
 from tensorboard.plugins.beholder import Beholder
 from src.dataLoader.turbulence import Turbulence, LARGE_DATASET, TEST_DATASET_5, datasets
@@ -208,8 +207,8 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
                 data = tf.constant(dtype=tf.float32, value=loader.get_data())
 
                 # Get any input noise if present
-                noise = tf.constant(dtype=tf.float32, value=loader.get_input_noise())
-                if noise is not None:
+                if loader.get_input_noise() is not None:
+                    noise = tf.constant(dtype=tf.float32, value=loader.get_input_noise())
                     input_data = data + noise
                 else:
                     input_data = data
@@ -232,7 +231,7 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
 
             with tf.name_scope('Label'):
                 size = [50, 50, pred_length]
-                Y = tf.map_fn(lambda region: tf.slice(data, region[0], size), regions, dtype=tf.float32)
+                Y = tf.map_fn(lambda region: tf.slice(data, region[2], size), regions, dtype=tf.float32)
 
                 # Map the label to the same time first ordering
                 Y = tf.transpose(Y, perm=[3, 0, 1, 2])
