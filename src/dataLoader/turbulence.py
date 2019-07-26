@@ -1,4 +1,3 @@
-#%%
 import math
 import os
 import sys
@@ -9,10 +8,6 @@ import numpy as np
 
 
 from pathlib import Path
-
-
-#%%
-print(os.getcwd())
 from sklearn.model_selection import train_test_split
 
 J = os.path.join
@@ -66,9 +61,6 @@ RANDOM_SEED = 42
 #         batch = ses.run(getNext)
 #         print(batch)
 
-#%%
-
-#%%
 def make_iterator(dataset, num_windows, batch_size):
     return dataset.shuffle(num_windows, RANDOM_SEED)\
             .batch(batch_size) \
@@ -95,13 +87,13 @@ def make_rectangles(location, window_size):
 # Sequence to frame model
 class Turbulence:
 
-    def __init__(self, batch_size=64, patch_size=50, window_size=20, num_windows=50000, pred_length=20,
+    def __init__(self, batch_size=64, patch_size=50, history_length=20, num_windows=50000, pred_length=20,
                  dataset_idx=LARGE_DATASET, input_noise=None, debug=False):
         """
 
         :param batch_size: Number of samples per batch
         :param patch_size: Width and height of patch
-        :param window_size: Number of frames of history given as input
+        :param history_length: Number of frames of history given as input
         :param num_windows: Number of random patches
         :param pred_length: Number of predicted frames
         :param dataset_idx: Enum representing which dataset to load
@@ -112,13 +104,13 @@ class Turbulence:
         self.noise = input_noise
         self.batch_size = batch_size
         # For small memory machines - just load the needed array rather than the whole .mat file
-        self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[dataset_idx]))['U_t']
+        self.data = sio.loadmat(J(os.getcwd(), 'orbitalMechanics', dataDir, datasets[dataset_idx]))['U_t']
         self.shape = self.data.shape
         if debug:
             print('shape:', self.shape)
 
         self.pred_length = pred_length
-        window_shape = [patch_size, patch_size, window_size]
+        window_shape = [patch_size, patch_size, history_length]
         window_shape[-1] += self.pred_length
         if debug:
             print('window_shape', window_shape)

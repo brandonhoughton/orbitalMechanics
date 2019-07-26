@@ -11,12 +11,12 @@ E = os.path.exists
 ## Architecures ##
 
 
-def lstm_encode(X, outDim=[250, 125, 125, 125, 250], batchSize = 64):
+def lstm_encode(X, outDim=[250, 250, 250], batchSize = 64):
     print('Encoder input shape:', X.get_shape().as_list())
     rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
-        # [tf.nn.rnn_cell.LSTMCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        [tf.nn.rnn_cell.LSTMCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
         # [tf.nn.rnn_cell.BasicRNNCell(dim, name="encode_" + str(idx), activation=None) for (idx, dim) in enumerate(outDim)]
-        [tf.nn.rnn_cell.GRUCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        # [tf.nn.rnn_cell.GRUCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
     )
     initial_state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
     # print('Zero state shape:(', initial_state[0].get_shape().as_list(), ',', initial_state[1].get_shape().as_list(), ')')
@@ -28,7 +28,7 @@ def lstm_encode(X, outDim=[250, 125, 125, 125, 250], batchSize = 64):
     return state
 
 
-def lstm_decode(X, outDim=[250, 125, 125, 125, 250], batchSize=64, pred_length=200, inputShape=[20, -1, 50 * 50]):
+def lstm_decode(X, outDim=[250, 250, 250], batchSize=64, pred_length=200, inputShape=[20, -1, 50 * 50]):
     padded = tf.ones([pred_length, batchSize, 50*50], dtype=tf.float32)
     print('Padded input shape:', padded.get_shape().as_list())
 
@@ -37,8 +37,8 @@ def lstm_decode(X, outDim=[250, 125, 125, 125, 250], batchSize=64, pred_length=2
     # print('State shape:(', X[0].get_shape().as_list(), ',', X[1].get_shape().as_list(), ')')
     # print('Zero state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
     rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
-        [tf.nn.rnn_cell.GRUCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
-        # [tf.nn.rnn_cell.LSTMCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        # [tf.nn.rnn_cell.GRUCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
+        [tf.nn.rnn_cell.LSTMCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
         # [tf.nn.rnn_cell.BasicRNNCell(dim, name="decode_" + str(idx), activation=None) for (idx, dim) in enumerate(outDim)]
     )
     output, state = tf.nn.dynamic_rnn(rnn_cell, padded, initial_state=state, dtype=tf.float32, time_major=True, parallel_iterations=64)
@@ -160,7 +160,7 @@ use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005   # Scale for Phi
-lr = 0.0001  # Learning Rate
+lr = 0.0005  # Learning Rate
 #######################
 
 ########################################################################################################################
@@ -248,31 +248,42 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
         #########################
         #     Define network    #
         #########################
-        with tf.name_scope('Encode'):
+#         with tf.name_scope('Encode'):
 
-            baseNetwork = lstm_encode(X, batchSize=loader.batch_size)
-            # baseNetwork = singleConvolution(X)
-            # baseNetwork = dropout(baseNetwork)
-            # baseNetwork = singleLayer(baseNetwork, outDim=32)
-            # baseNetwork = singleLayer(baseNetwork, outDim=64, activation=tf.nn.sigmoid)
-            # baseNetwork = multiConvolution(X)
-            # baseNetwork = reduceEnlarge(X)
-            # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
+#             baseNetwork = lstm_encode(X, batchSize=loader.batch_size)
+#             # baseNetwork = singleConvolution(X)
+#             # baseNetwork = dropout(baseNetwork)
+#             # baseNetwork = singleLayer(baseNetwork, outDim=32)
+#             # baseNetwork = singleLayer(baseNetwork, outDim=64, activation=tf.nn.sigmoid)
+#             # baseNetwork = multiConvolution(X)
+#             # baseNetwork = reduceEnlarge(X)
+#             # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
 
-        with tf.name_scope('Decode'):
-            num_out = 50 * 50  # * loader.pred_length
+#         with tf.name_scope('Decode'):
+#             num_out = 50 * 50  # * loader.pred_length
 
-            state = lstm_decode(baseNetwork, batchSize=loader.batch_size, pred_length=pred_length)
+#             state = lstm_decode(baseNetwork, batchSize=loader.batch_size, pred_length=pred_length)
 
-        with tf.name_scope('Prediction'):
+#         with tf.name_scope('Prediction'):
 
-            # Map the enlarger network over the first axis (time)
-            Pred = tf.map_fn(lambda x: tf.layers.dense(x, num_out, activation=None), state)
+#             # Map the enlarger network over the first axis (time)
+#             Pred = tf.map_fn(lambda x: tf.layers.dense(x, num_out, activation=None), state)
 
-            # [200, 64, 50 * 50]              0,  1,  2,  3
-            Pred = tf.reshape(Pred, [pred_length, -1, 50, 50])  # Reshape the output to be width x height x 1
-            # [200, 64, 50, 50]
-            # Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
+#             # [200, 64, 50 * 50]              0,  1,  2,  3
+#             Pred = tf.reshape(Pred, [pred_length, -1, 50, 50])  # Reshape the output to be width x height x 1
+#             # [200, 64, 50, 50]
+#             # Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
+            
+#         # [200, 64, 50 * 50]              0,  1,  2,  3
+#         Pred = tf.reshape(Pred, [pred_length, -1, 50, 50])  # Reshape the output to be width x height x 1
+        
+        
+            
+        Pred = singleLayer(tf.transpose(X, perm=[1, 0, 2]), outDim=pred_length*50*50)
+        Pred = tf.reshape(Pred, [-1, pred_length, 50, 50])  # Reshape the output to be width x height x 1
+        Pred = tf.transpose(Pred, perm=[1, 0, 2, 3])
+
+
 
         # with tf.name_scope('Confidence'):
         #

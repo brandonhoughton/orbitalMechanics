@@ -2,307 +2,190 @@ import json
 import os
 import tensorflow as tf
 import numpy as np
+import traceback
 from tensorflow import keras
 from tensorboard.plugins.beholder import Beholder
 from src.dataLoader.turbulence import Turbulence, LARGE_DATASET, TEST_DATASET_5, datasets
+
 J = os.path.join
 E = os.path.exists
 
-## Architecures ##
+
+#   Architectures   #
 
 
-def lstm_encode(X, outDim=[250, 125, 125, 125, 250], batchSize = 64):
-    print('Encoder input shape:', X.get_shape().as_list())
-    rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
-        # [tf.nn.rnn_cell.LSTMCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
-        # [tf.nn.rnn_cell.BasicRNNCell(dim, name="encode_" + str(idx), activation=None) for (idx, dim) in enumerate(outDim)]
-        [tf.nn.rnn_cell.GRUCell(dim, name="encode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
-    )
-    initial_state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
-    # print('Zero state shape:(', initial_state[0].get_shape().as_list(), ',', initial_state[1].get_shape().as_list(), ')')
-    output, state = tf.nn.dynamic_rnn(rnn_cell, X, initial_state=initial_state, dtype=tf.float32, time_major=True, parallel_iterations=64)
+def residual_cell(activation, skip_depth, num_features, kernel_width):
+    num_filters = num_features
+    kernel_size = (kernel_width, kernel_width)
 
-    # print('Output state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
+    # Pass activation to last layer and cell layers
+    head = activation
 
-    # We ignore the output of this layer, just need it to build an embedding
-    return state
+    # Cell layers
+    for i in range(skip_depth):
+        head = tf.layers.conv2d(
+            head, num_filters, kernel_size, name='res_layer_{}'.format(i),
+            padding='same')
+        if i == skip_depth - 1:
+            head += activation
+        head = tf.nn.relu(head)
 
-
-def lstm_decode(X, outDim=[250, 125, 125, 125, 250], batchSize=64, pred_length=200, inputShape=[20, -1, 50 * 50]):
-    padded = tf.ones([pred_length, batchSize, 50*50], dtype=tf.float32)
-    print('Padded input shape:', padded.get_shape().as_list())
-
-    state = X
-    # state = rnn_cell.zero_state(batchSize, dtype=tf.float32)
-    # print('State shape:(', X[0].get_shape().as_list(), ',', X[1].get_shape().as_list(), ')')
-    # print('Zero state shape:(', state[0].get_shape().as_list(), ',', state[1].get_shape().as_list(), ')')
-    rnn_cell = tf.nn.rnn_cell.MultiRNNCell(
-        [tf.nn.rnn_cell.GRUCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
-        # [tf.nn.rnn_cell.LSTMCell(dim, name="decode_" + str(idx)) for (idx, dim) in enumerate(outDim)]
-        # [tf.nn.rnn_cell.BasicRNNCell(dim, name="decode_" + str(idx), activation=None) for (idx, dim) in enumerate(outDim)]
-    )
-    output, state = tf.nn.dynamic_rnn(rnn_cell, padded, initial_state=state, dtype=tf.float32, time_major=True, parallel_iterations=64)
-    print(output.get_shape().as_list())
-
-    # We ignore the state, just  return the output
-    return output
+    # Skip layer
+    return head
 
 
-def ped(X, num_layers=3):
+def ped(X, pred_len, skip_depth=3, num_features=16, kernel_size=5):
+    # Input 50 x 50 X history_len patch
+    # Map this patch to match the residual cell size
+    head = tf.layers.conv2d(
+        X, filters=num_features, kernel_size=1, activation=tf.nn.relu, name='map_input', padding='same')
 
-    # Input 50 x 50 patch
-    head = X
+    head = tf.scan(
+        fn=lambda acc, _: residual_cell(acc, skip_depth, num_features, kernel_size),
+        elems=tf.zeros(pred_len), initializer=head)
 
-    # Activation size
-    filters = (16, 8, 1)
-    kernels = (5, 1, 1)
-
-    for i in range(num_layers):
-        head = tf.layers.conv2d(head, filters[i], kernels[i], activation=tf.nn.relu)
-
-
-
-    # Use convolutional layers to distribute pde
-
-    # Create a `layers_stacked_count` of stacked RNNs (GRU cells here).
-    cells = []
-    for i in range(num_layers):
-        with tf.variable_scope('RNN_{}'.format(i)):
-            cells.append(tf.nn.rnn_cell.GRUCell(outDim))
-            # cells.append(tf.nn.rnn_cell.BasicLSTMCell(...))
-    cell = tf.nn.rnn_cell.MultiRNNCell(cells)
-    decoder_inputs = [tf.zeros_like(X[0], dtype=tf.float32, name="GO")] + X[:-1]
-    dec_outputs, dec_memory = tf.contrib.legacy_seq2seq.basic_rnn_seq2seq(
-        X,
-        decoder_inputs,
-        cell
+    head = tf.map_fn(
+        fn=lambda elem:
+            tf.layers.conv2d(inputs=elem, filters=1, kernel_size=1, activation=tf.nn.relu, name='map_output'),
+        elems=head
     )
 
-    return dec_outputs
+    head = tf.squeeze(head)
 
-
-def singleLayer(X, outDim = 50, activation=tf.nn.relu):
-    # Hidden layers
-    head = tf.layers.flatten(X)
-    # head = tf.layers.dense(head, outDim, activation=tf.nn.sigmoid, use_bias=True)
-    head = tf.layers.dense(head, outDim, activation=activation, use_bias=True)
-    return head
-
-
-def dropout(X):
-    return tf.layers.dropout(X)
-
-
-def singleConvolution(X, numFilters = 5, filterSize=5, stride=3):
-    # Hidden layers
-    head = tf.layers.conv2d(X, numFilters, filterSize, stride, "same", activation=tf.nn.relu)
-    return head
-
-
-def trippleLayer(X, outDim = 128):
-    head = tf.layers.flatten(X)
-    head = tf.layers.dense(head, 64, activation=tf.nn.sigmoid, name="dense_1", use_bias=True)
-    head = tf.layers.dense(head, 32, activation=tf.nn.sigmoid, name="dense_2", use_bias=True)
-    head = tf.layers.dropout(head)
-    head = tf.layers.dense(head, outDim, activation=None, name="dense_4", use_bias=True)
-    return head
-
-def fulllyConvPatchToPatch(X):
-    head = X
-    print('Input:', head.shape)
-    head = tf.layers.conv2d(head, 20, 15, 5, "same", activation=tf.nn.relu)
-    print('1:', head.shape)
-    head = tf.layers.conv2d(head, 20, 10, 2, "same", activation=tf.nn.relu)
-    print('2:', head.shape)
-    head = tf.layers.conv2d(head, 40, 5, 1, "same", activation=tf.nn.relu)
-    print('3:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 40, 5, 1, "same", activation=tf.nn.relu)  # 50 x 50
-    print('4:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 20, 10, 2, "same", activation=tf.nn.sigmoid)  # 50 x 50
-    print('5:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 20, 15, 5, "same", activation=None)  # 50 x 50
-    print('Output:', head.shape)
-    return head
-
-def multiConvolution(X):
-    head = X
-    print('Input:', head.shape)
-    head = tf.layers.conv2d(head, 10, 6, 3, "valid")  # 15 x 15
-    print('1:', head.shape)
-    head = tf.layers.conv2d(head, 20, 6, 1, "valid")  # 10 x 10
-    print('2:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 10, 10, 4, "same")  # 40 x 40
-    print('3:', head.shape)
-    head = head[:,:,:-9,:] # 40 x 31
-    print('4:', head.shape)
-    head = tf.layers.conv2d(head, 64, 5, 1, "same")  # 40 x 31
-    print('5:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 1, 15, 9, "same", activation=None)  # 360 x 274
-    print('Output:', head.shape)
-    return head
-
-def reduceEnlarge(X):
-    head = X
-    print('Input:', head.shape)
-    head = tf.layers.conv2d(head, 20, 7, 3, "same")
-    print('1:', head.shape)
-    head = tf.layers.conv2d(head, 17, 5, 3, "same")
-    print('2:', head.shape)
-    head = tf.layers.conv2d(head, 15, 3, 1, "same")
-    print('2:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 15, 3, 1, "same")
-    print('3:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 20, 5, 3, "same")
-    print('3:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 20, 7, 3, "same")
-    print('4:', head.shape)
-    head = tf.layers.conv2d(head, 15, 5, 1, "same")
-    print('5:', head.shape)
-    head = tf.layers.conv2d_transpose(head, 1, 5, 1, "same", activation=None)
-    print('Output:', head.shape)
     return head
 
 
 #######################
-train_batch =     100000
-summary_step =     500
-validation_step =   500
-checkpoint_int =   20000
-pre_train_steps =  500
-save_pred_steps =  10000
+train_batch = 200000
+summary_step = 500
+validation_step = 5000
+checkpoint_int = 20000
+pre_train_steps = 500
+save_pred_steps = 10000
 #######################
 use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
-g = 0.005   # Scale for Phi
-lr = 0.0001  # Learning Rate
+g = 0.005  # Scale for Phi
+lr = 0.0005  # Learning Rate
 #######################
 
 ########################################################################################################################
 
-net_name = None # 'gru_predict_3_cells_200_low_lr'
-saveDir = os.path.join('experiments', 'turbulence', 'recurrent_scaled_mse')
+_net_name = 'PDE_3-skip_1-cell_resnet'
+_save_dir = os.path.join('experiments', 'turbulence', 'recurrent_scaled_mse')
 
 
 ########################################################################################################################
 
-def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=None, num_batches=train_batch,
+def train(net_name=_net_name, save_dir=_save_dir, dataset_idx=LARGE_DATASET, loader=None, num_batches=train_batch,
           pixel_dropout=None):
-    LOG_DIR = J('.', saveDir, net_name + '_' + datasets[dataset_idx] + '_lr' + str(lr))
+
+    history_length = 20
+    pred_length = 40
+
+    LOG_DIR = J('.', save_dir, net_name + '_' + datasets[dataset_idx] +
+                '_{}-lr_{}-hist_{}-pred'.format(lr, history_length, pred_length))
 
     # Start beholder
-    # beholder = Beholder(LOG_DIR)
-    np.random.normal()
+    beholder = Beholder(LOG_DIR)
 
     # Load data
-    pred_length = 200
+
     if loader is None:
-        loader = Turbulence(pred_length=pred_length, dataset_idx=dataset_idx)
+        loader = Turbulence(history_length=history_length, pred_length=pred_length, dataset_idx=dataset_idx)
     else:
         pred_length = loader.pred_length
 
     # Load data onto GPU memory - ensure network layers have GPU support
-    config = tf.ConfigProto()
+    config = tf.ConfigProto(log_device_placement=True)
     config.gpu_options.allow_growth = True
     # config.allow_soft_placement = True
     with tf.Session(config=config) as sess:
 
         # sess = tf.Session(config=tf.ConfigProto(log_device_placement=True))
 
-        test = tf.placeholder_with_default(tf.constant(False, dtype=tf.bool), name="testing_flag", shape=())
-
-        regions = tf.cond(test,
-                          true_fn=lambda: loader.get_test_region_batch,
-                          false_fn=lambda: loader.get_train_region_batch)
+        with tf.device('/cpu:0'):
+            test = tf.placeholder_with_default(tf.constant(False, dtype=tf.bool), name="testing_flag", shape=())
+            regions = tf.cond(test, strict=True,
+                              true_fn=lambda: loader.get_test_region_batch,
+                              false_fn=lambda: loader.get_train_region_batch)
 
         # if True:
-        with tf.device('/cpu:0'):
+        with tf.device('/gpu:0'):
             with tf.name_scope('Data'):
                 # Data does not fit into tensorflow data pipeline - so we split it later using a tensorflow slice op
-                data = tf.constant(dtype=tf.float32, value=loader.get_data())
+                data_value = loader.get_data()
+                data = tf.constant(dtype=tf.float32, value=data_value)
+                input_data = data
 
-                # Get any input noise if present
-                if loader.get_input_noise() is not None:
-                    noise = tf.constant(dtype=tf.float32, value=loader.get_input_noise())
-                    input_data = data + noise
-                else:
-                    input_data = data
+                # # Get any input noise if present
+                # if loader.get_input_noise() is not None:
+                #     noise = tf.constant(dtype=tf.float32, value=loader.get_input_noise())
+                #     input_data = data + noise
+                # else:
+                #     input_data = data
+                #
+                # # Handle dropout if present
+                # if pixel_dropout is not None:
+                #     input_data = tf.layers.dropout(input_data, rate=pixel_dropout)
 
-                # Handle dropout if present
-                if pixel_dropout is not None:
-                    input_data = tf.layers.dropout(input_data, rate=pixel_dropout)
-
-########################################################################################################################
+            ############################################################################################################
 
             with tf.name_scope('Input'):
                 # Simple 50 x 50 region with 20 frames of history.
-                X = tf.map_fn(lambda region: tf.slice(input_data, region[0], [50, 50, 20]), regions, dtype=tf.float32)
+
+                # X = tf.gather_nd()
+                # rrr = regions
+                # print(rrr)
+                # region = tf.map_fn(lambda region: region[0], regions, dtype=tf.float32)
+                # print(region)
+                # X = tf.map_fn(lambda i: input_data[0:50, 0:50, 0:history_length], tf.zeros(64), dtype=tf.float32)
+                # print(X)
+                X = tf.map_fn(lambda region: tf.slice(input_data, region[0], [50, 50, history_length]), regions, dtype=tf.float32)
 
                 # Tensorflow wants time first, before transpose we have [batch, u, v, time]:[0, 1, 2, 3]
-                X = tf.transpose(X, perm=[3, 0, 1, 2])
+                # X = tf.transpose(X, perm=[3, 0, 1, 2])
 
                 # Ensure that the shape is well defined ( mapping slice operations is evaluated as a dynamic size)
-                X = tf.reshape(X, (20, -1, 50 * 50))  # Flattened for fully connected layers
+                # X = tf.reshape(X, (20, -1, 50 * 50))  # Flattened for fully connected layers
 
             with tf.name_scope('Label'):
                 size = [50, 50, pred_length]
+                # Y = tf.map_fn(lambda i: data[0:50, 0:50, history_length:history_length+pred_length], tf.zeros(64), dtype=tf.float32)
+
                 Y = tf.map_fn(lambda region: tf.slice(data, region[1], size), regions, dtype=tf.float32)
 
                 # Map the label to the same time first ordering
                 Y = tf.transpose(Y, perm=[3, 0, 1, 2])
 
-                outDim = [pred_length, -1, 50 * 50]
+                # outDim = [pred_length, -1, 50 * 50]
                 # Y = tf.reshape(Y, outDim)
 
         print("Input shape:", X.shape)
         print("Output shape:", Y.shape)
         # print_op = tf.Print(X,[X])
 
-########################################################################################################################
+        ################################################################################################################
 
         #########################
         #     Define network    #
         #########################
-        with tf.name_scope('Encode'):
+        Pred = ped(X, pred_length)
 
-            baseNetwork = lstm_encode(X, batchSize=loader.batch_size)
-            # baseNetwork = singleConvolution(X)
-            # baseNetwork = dropout(baseNetwork)
-            # baseNetwork = singleLayer(baseNetwork, outDim=32)
-            # baseNetwork = singleLayer(baseNetwork, outDim=64, activation=tf.nn.sigmoid)
-            # baseNetwork = multiConvolution(X)
-            # baseNetwork = reduceEnlarge(X)
-            # baseNetwork = seq2seq(X, outDim=512)  # [batch_size, seq_len, height, width]
+        print("Network shape:", Pred.shape)
 
-        with tf.name_scope('Decode'):
-            num_out = 50 * 50  # * loader.pred_length
-
-            state = lstm_decode(baseNetwork, batchSize=loader.batch_size, pred_length=pred_length)
-
-        with tf.name_scope('Prediction'):
-
-            # Map the enlarger network over the first axis (time)
-            Pred = tf.map_fn(lambda x: tf.layers.dense(x, num_out, activation=None), state)
-
-            # [200, 64, 50 * 50]              0,  1,  2,  3
-            Pred = tf.reshape(Pred, [pred_length, -1, 50, 50])  # Reshape the output to be width x height x 1
-            # [200, 64, 50, 50]
-            # Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
-
-        # with tf.name_scope('Confidence'):
+        # with tf.name_scope('Prediction'):
         #
-        #     # Map the confidence estimation over the first axis (time)
-        #     # [200, 64, 500]
-        #     conf = tf.map_fn(lambda x: tf.layers.dense(x, 20, activation=tf.nn.elu), state)
-        #     # [200, 64, 20]
-        #     conf = tf.map_fn(lambda x: tf.layers.dense(x, 1, activation=tf.nn.elu), conf)
-        #     # [200, 64, 1]
-        #     conf = tf.reduce_mean(conf, axis=[1, 2])  # [200]
-        #     # conf = tf.squeeze(conf)  # [200, 64]
+        #     # Map the enlarger network over the first axis (time)
+        #     Pred = tf.map_fn(lambda x: tf.layers.dense(x, num_out, activation=None), state)
         #
-        #     avg_cong = tf.reduce_mean(conf)
+        #     # [200, 64, 50 * 50]              0,  1,  2,  3
+        #     Pred = tf.reshape(Pred, [pred_length, -1, 50, 50])  # Reshape the output to be width x height x 1
+        #     # [200, 64, 50, 50]
+        #     # Pred = tf.transpose(Pred, perm=[1, 2, 3, 0])
 
-########################################################################################################################
+        ################################################################################################################
 
         #########################
         #      Define loss      #
@@ -327,7 +210,6 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
         with tf.name_scope('train'):
             adam = tf.train.AdamOptimizer(learning_rate=lr)
             grads = adam.compute_gradients(pred_loss)
-            # grads = adam.compute_gradients(conf_weighted_loss)
             train_step = adam.apply_gradients(grads)
 
         tf.summary.histogram("Loss Histogram", loss_over_time)
@@ -347,10 +229,14 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
 
         merged_with_imgs = \
             [merged,
-            tf.summary.image('Predicted_t0', tf.expand_dims(Pred[0, :, :, :], axis=-1), max_outputs=5),
-            tf.summary.image('Label', tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
-            tf.summary.image('Error', tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
-            tf.summary.image('Mean Abs Error', tf.expand_dims(tf.reduce_mean(abs(tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1)), axis=0), axis=0), max_outputs=1),
+             tf.summary.image('Predicted_t0', tf.expand_dims(Pred[0, :, :, :], axis=-1), max_outputs=5),
+             tf.summary.image('Label', tf.expand_dims(Y[0, :, :, :], axis=-1), max_outputs=5),
+             tf.summary.image('Error',
+                              tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1),
+                              max_outputs=5),
+             tf.summary.image('Mean Abs Error', tf.expand_dims(
+                 tf.reduce_mean(abs(tf.expand_dims(Pred[0, :, :, :], axis=-1) - tf.expand_dims(Y[0, :, :, :], axis=-1)),
+                                axis=0), axis=0), max_outputs=1),
              # ##
              ]
         #     tf.summary.image('Predicted_t59', tf.expand_dims(Pred[59, :, :, :], axis=-1), max_outputs=5),
@@ -407,11 +293,12 @@ def train(net_name=net_name, saveDir=saveDir, dataset_idx=LARGE_DATASET, loader=
                     print('(', loss, batch, ')')
                 else:
                     sess.run(train_step)
-                    # beholder.update(sess)
+                    beholder.update(sess)
 
                 if batch > pre_train_steps and batch % save_pred_steps == 0:
                     flags = dict({'testing_flag:0': True})
-                    summaries, prediction, label, input_with_noise, accuracy = sess.run([merged_with_imgs, Pred, Y, X, pred_loss], feed_dict=flags)
+                    summaries, prediction, label, input_with_noise, accuracy = sess.run(
+                        [merged_with_imgs, Pred, Y, X, pred_loss], feed_dict=flags)
                     for summary in summaries:
                         test_writer.add_summary(summary, batch)
                     input_sequences[str(batch)] = np.array(input_with_noise)
