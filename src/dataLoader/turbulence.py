@@ -104,7 +104,7 @@ class Turbulence:
         self.noise = input_noise
         self.batch_size = batch_size
         # For small memory machines - just load the needed array rather than the whole .mat file
-        self.data = sio.loadmat(J(os.getcwd(), 'orbitalMechanics', dataDir, datasets[dataset_idx]))['U_t']
+        self.data = sio.loadmat(J(os.getcwd(), dataDir, datasets[dataset_idx]))['U_t']
         self.shape = self.data.shape
         if debug:
             print('shape:', self.shape)

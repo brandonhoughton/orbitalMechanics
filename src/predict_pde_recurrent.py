@@ -56,7 +56,7 @@ def ped(X, pred_len, skip_depth=3, num_features=16, kernel_size=5):
 
 
 #######################
-train_batch = 200000
+train_batch = 50000
 summary_step = 500
 validation_step = 5000
 checkpoint_int = 20000
@@ -81,7 +81,7 @@ _save_dir = os.path.join('experiments', 'turbulence', 'recurrent_scaled_mse')
 def train(net_name=_net_name, save_dir=_save_dir, dataset_idx=LARGE_DATASET, loader=None, num_batches=train_batch,
           pixel_dropout=None):
 
-    history_length = 20
+    history_length = 5
     pred_length = 40
 
     LOG_DIR = J('.', save_dir, net_name + '_' + datasets[dataset_idx] +
@@ -91,7 +91,6 @@ def train(net_name=_net_name, save_dir=_save_dir, dataset_idx=LARGE_DATASET, loa
     beholder = Beholder(LOG_DIR)
 
     # Load data
-
     if loader is None:
         loader = Turbulence(history_length=history_length, pred_length=pred_length, dataset_idx=dataset_idx)
     else:
@@ -119,12 +118,12 @@ def train(net_name=_net_name, save_dir=_save_dir, dataset_idx=LARGE_DATASET, loa
                 data = tf.constant(dtype=tf.float32, value=data_value)
                 input_data = data
 
-                # # Get any input noise if present
-                # if loader.get_input_noise() is not None:
-                #     noise = tf.constant(dtype=tf.float32, value=loader.get_input_noise())
-                #     input_data = data + noise
-                # else:
-                #     input_data = data
+                # Get any input noise if present
+                if loader.get_input_noise() is not None:
+                    noise = tf.constant(dtype=tf.float32, value=loader.get_input_noise())
+                    input_data = data + noise
+                else:
+                    input_data = data
                 #
                 # # Handle dropout if present
                 # if pixel_dropout is not None:
