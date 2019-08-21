@@ -42,7 +42,7 @@ def ped(X, pred_len, skip_depth=3, num_features=16, kernel_size=5):
 
     head = tf.scan(
         fn=lambda acc, _: residual_cell(acc, skip_depth, num_features, kernel_size),
-        elems=tf.zeros(pred_len), initializer=head)
+        elems=tf.zeros(pred_len), initializer=head, swap_memory=True)
 
     head = tf.map_fn(
         fn=lambda elem:
@@ -58,8 +58,8 @@ def ped(X, pred_len, skip_depth=3, num_features=16, kernel_size=5):
 #######################
 train_batch = 50000
 summary_step = 500
-validation_step = 5000
-checkpoint_int = 20000
+validation_step = 2000
+checkpoint_int = 10000
 pre_train_steps = 500
 save_pred_steps = 10000
 #######################
@@ -72,17 +72,24 @@ lr = 0.0005  # Learning Rate
 
 ########################################################################################################################
 
-_net_name = 'PDE_3-skip_1-cell_resnet'
-_save_dir = os.path.join('experiments', 'turbulence', 'recurrent_scaled_mse')
+_net_name = 'conv_3-skip_1-cell'
+_save_dir = os.path.join('experiments', 'turbulence', 'pde')
 
 
 ########################################################################################################################
 
-def train(net_name=_net_name, save_dir=_save_dir, dataset_idx=LARGE_DATASET, loader=None, num_batches=train_batch,
-          pixel_dropout=None):
+def train(net_name=_net_name,
+          save_dir=_save_dir,
+          dataset_idx=LARGE_DATASET,
+          loader=None,
+          num_batches=train_batch,
+          pixel_dropout=None,
+          conv_width=5,
+          history_length=5,
+          pred_length=40):
 
-    history_length = 5
-    pred_length = 40
+    # Ensure that we don't carry over any variables from previous sessions
+    tf.reset_default_graph()
 
     LOG_DIR = J('.', save_dir, net_name + '_' + datasets[dataset_idx] +
                 '_{}-lr_{}-hist_{}-pred'.format(lr, history_length, pred_length))
@@ -124,10 +131,10 @@ def train(net_name=_net_name, save_dir=_save_dir, dataset_idx=LARGE_DATASET, loa
                     input_data = data + noise
                 else:
                     input_data = data
-                #
-                # # Handle dropout if present
-                # if pixel_dropout is not None:
-                #     input_data = tf.layers.dropout(input_data, rate=pixel_dropout)
+
+                # Handle dropout if present
+                if pixel_dropout is not None:
+                    input_data = tf.layers.dropout(input_data, rate=pixel_dropout, training=True)
 
             ############################################################################################################
 
@@ -170,7 +177,7 @@ def train(net_name=_net_name, save_dir=_save_dir, dataset_idx=LARGE_DATASET, loa
         #########################
         #     Define network    #
         #########################
-        Pred = ped(X, pred_length)
+        Pred = ped(X, pred_length, kernel_size=conv_width)
 
         print("Network shape:", Pred.shape)
 
