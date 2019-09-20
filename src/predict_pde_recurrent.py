@@ -1,11 +1,16 @@
+import functools
 import json
 import os
 import tensorflow as tf
 import numpy as np
 import traceback
+import tqdm
 from tensorflow import keras
 from tensorboard.plugins.beholder import Beholder
 from src.dataLoader.turbulence import Turbulence, LARGE_DATASET, TEST_DATASET_5, datasets
+
+from tensorflow.python.util import deprecation
+deprecation._PRINT_DEPRECATION_WARNINGS = False
 
 J = os.path.join
 E = os.path.exists
@@ -28,20 +33,50 @@ def residual_cell(activation, skip_depth, num_features, kernel_width):
             padding='same')
         if i == skip_depth - 1:
             head += activation
-        head = tf.nn.relu(head)
+        head = tf.nn.leaky_relu(head)
 
     # Skip layer
     return head
 
 
-def ped(X, pred_len, skip_depth=3, num_features=16, kernel_size=5):
+def pde(X, pred_len, skip_depth=3, num_features=16, kernel_size=5, encoder_kernel_size=1):
     # Input 50 x 50 X history_len patch
     # Map this patch to match the residual cell size
     head = tf.layers.conv2d(
-        X, filters=num_features, kernel_size=1, activation=tf.nn.relu, name='map_input', padding='same')
+        X, filters=num_features, kernel_size=encoder_kernel_size, activation=tf.nn.leaky_relu, name='map_input',
+        padding='valid')
 
     head = tf.scan(
         fn=lambda acc, _: residual_cell(acc, skip_depth, num_features, kernel_size),
+        elems=tf.zeros(pred_len), initializer=head, swap_memory=True)
+
+    head = tf.map_fn(
+        fn=lambda elem:
+            tf.layers.conv2d(inputs=elem, filters=1, kernel_size=1, activation=tf.nn.leaky_relu, name='map_output'),
+        elems=head
+    )
+
+    head = tf.squeeze(head)
+
+    return head
+
+
+def runge_kutta_pde(X, pred_len, skip_depth=3, num_features=16, kernel_size=5, encoder_kernel_size=1):
+    # Input 50 x 50 X history_len patch
+    # Map this patch to match the residual cell size
+    head = tf.layers.conv2d(
+        X, filters=num_features, kernel_size=encoder_kernel_size, activation=tf.nn.relu, name='map_input',
+        padding='valid')
+
+    def rk4(y):
+        k1 = residual_cell(y, skip_depth, num_features, kernel_size)
+        k2 = residual_cell(y + 0.5 * k1, skip_depth, num_features, kernel_size)
+        k3 = residual_cell(y + 0.5 * k2, skip_depth, num_features, kernel_size)
+        k4 = residual_cell(y + k3, skip_depth, num_features, kernel_size)
+        return (k1 + k2 + k3 + k4) / 4
+
+    head = tf.scan(
+        fn=lambda acc, _: rk4(acc),
         elems=tf.zeros(pred_len), initializer=head, swap_memory=True)
 
     head = tf.map_fn(
@@ -67,12 +102,12 @@ use_split_pred = False
 a = 0.0001  # GradNorm Weight
 b = 0.00000000  # Prediction Weight
 g = 0.005  # Scale for Phi
-lr = 0.0005  # Learning Rate
+lr = 0.001  # Learning Rate
 #######################
 
 ########################################################################################################################
 
-_net_name = 'conv_3-skip_1-cell'
+_net_name = 'lin_relu_cell'
 _save_dir = os.path.join('experiments', 'turbulence', 'pde')
 
 
@@ -86,16 +121,25 @@ def train(net_name=_net_name,
           pixel_dropout=None,
           conv_width=5,
           history_length=5,
-          pred_length=40):
+          pred_length=40,
+          encoder_kernel_size=1,
+          network=None,
+          retrain=False,
+          multi_pred_len=False,
+          starting_batch=0):
 
     # Ensure that we don't carry over any variables from previous sessions
     tf.reset_default_graph()
 
-    LOG_DIR = J('.', save_dir, net_name + '_' + datasets[dataset_idx] +
-                '_{}-lr_{}-hist_{}-pred'.format(lr, history_length, pred_length))
+    if multi_pred_len:
+        LOG_DIR = J('.', save_dir, net_name +
+                '_{}-lr_{}-hist'.format(lr, history_length))
+    else:
+        LOG_DIR = J('.', save_dir, net_name +
+                    '_{}-lr_{}-hist_{}-pred'.format(lr, history_length, pred_length))
 
     # Start beholder
-    beholder = Beholder(LOG_DIR)
+    # beholder = Beholder(LOG_DIR)
 
     # Load data
     if loader is None:
@@ -104,8 +148,9 @@ def train(net_name=_net_name,
         pred_length = loader.pred_length
 
     # Load data onto GPU memory - ensure network layers have GPU support
-    config = tf.ConfigProto(log_device_placement=True)
-    config.gpu_options.allow_growth = True
+    config = tf.ConfigProto()
+    # config.log_device_placement=True
+    # config.gpu_options.allow_growth = True
     # config.allow_soft_placement = True
     with tf.Session(config=config) as sess:
 
@@ -113,6 +158,7 @@ def train(net_name=_net_name,
 
         with tf.device('/cpu:0'):
             test = tf.placeholder_with_default(tf.constant(False, dtype=tf.bool), name="testing_flag", shape=())
+            is_training = tf.logical_not(test)
             regions = tf.cond(test, strict=True,
                               true_fn=lambda: loader.get_test_region_batch,
                               false_fn=lambda: loader.get_train_region_batch)
@@ -157,10 +203,15 @@ def train(net_name=_net_name,
                 # X = tf.reshape(X, (20, -1, 50 * 50))  # Flattened for fully connected layers
 
             with tf.name_scope('Label'):
-                size = [50, 50, pred_length]
-                # Y = tf.map_fn(lambda i: data[0:50, 0:50, history_length:history_length+pred_length], tf.zeros(64), dtype=tf.float32)
+                over = encoder_kernel_size - 1
+                size = [50 - over, 50 - over, pred_length]
+                Y = tf.map_fn(lambda region: tf.slice(data, [region[1][0] + over//2, region[1][1] + over//2,
+                                                             region[1][2]], size), regions, dtype=tf.float32)
 
-                Y = tf.map_fn(lambda region: tf.slice(data, region[1], size), regions, dtype=tf.float32)
+                # size = [50, 50, pred_length]
+                # # Y = tf.map_fn(lambda i: data[0:50, 0:50, history_length:history_length+pred_length], tf.zeros(64), dtype=tf.float32)
+                #
+                # Y = tf.map_fn(lambda region: tf.slice(data, region[1], size), regions, dtype=tf.float32)
 
                 # Map the label to the same time first ordering
                 Y = tf.transpose(Y, perm=[3, 0, 1, 2])
@@ -177,7 +228,10 @@ def train(net_name=_net_name,
         #########################
         #     Define network    #
         #########################
-        Pred = ped(X, pred_length, kernel_size=conv_width)
+        if network is None:
+            Pred = pde(X, pred_length, kernel_size=conv_width, encoder_kernel_size=encoder_kernel_size)
+        else:
+            Pred = network(X, pred_length, is_training)
 
         print("Network shape:", Pred.shape)
 
@@ -213,10 +267,16 @@ def train(net_name=_net_name,
             pred_loss = tf.reduce_mean(loss_over_time)
             # conf_weighted_loss = tf.reduce_mean(conf_losses_over_time)
 
-        with tf.name_scope('train'):
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        with tf.control_dependencies(update_ops):
             adam = tf.train.AdamOptimizer(learning_rate=lr)
             grads = adam.compute_gradients(pred_loss)
             train_step = adam.apply_gradients(grads)
+
+            # # Add summaries for gradients
+            # for grad in grads:
+            #     tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
+            #     tf.summary.histogram("grad" + str(grad), grad)
 
         tf.summary.histogram("Loss Histogram", loss_over_time)
         # tf.summary.histogram("Confidence Histogram", conf)
@@ -226,9 +286,9 @@ def train(net_name=_net_name,
         # tf.summary.scalar("AvgConfidence", avg_cong)
         # tf.summary.scalar("ConfWeightedLoss", conf_weighted_loss)
 
-        # for grad in grads:
-        #     tf.summary.scalar("NormGradL1" + str(grad), tf.reduce_mean(tf.abs(grad)))
-        #     tf.summary.histogram("grad" + str(grad), grad)
+        for weight in tf.trainable_variables():
+            tf.summary.scalar("MeanWeight" + str(weight), tf.reduce_mean(weight))
+            tf.summary.histogram("w" +str(weight), weight)
 
         # Collect summary stats for train variables
         merged = tf.summary.merge_all()
@@ -268,7 +328,13 @@ def train(net_name=_net_name,
         # Create checkpoint saver
         saver = tf.train.Saver()
 
-        sess.run(tf.global_variables_initializer())
+        if retrain:
+            print('restoring weights')
+            # print('Searching for last checkpoint here:', J(LOG_DIR, 'network'))
+            saver.restore(sess, tf.train.latest_checkpoint(J(LOG_DIR, 'network')))
+        else:
+            sess.run(tf.global_variables_initializer())
+
         train_accuracy = dict()
         validation_accuracy = dict()
         input_sequences = dict()
@@ -286,27 +352,28 @@ def train(net_name=_net_name,
 
         # Train model
         try:
-            for batch in range(num_batches + 1):
+            for batch in tqdm.tqdm_notebook(range(num_batches), smoothing=0.02):
                 if batch > pre_train_steps and batch % summary_step == 0:
                     loss, summary, accuracy = sess.run([pred_loss, merged, loss_over_time])
                     # loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
-                    train_writer.add_summary(summary, batch)
+                    train_writer.add_summary(summary, batch + starting_batch)
                     train_accuracy[str(batch)] = accuracy
-                    print(loss, batch)
+                    # tqdm.tqdm.write(' {} {}'.format(loss, batch))
                 elif batch % summary_step == 0:
                     loss, summary = sess.run([pred_loss, merged])
                     # loss, confidence, summary = sess.run([pred_loss, avg_cong, merged])
-                    print('(', loss, batch, ')')
+                    # tqdm.tqdm.write('({} {})'.format(loss, batch))
                 else:
                     sess.run(train_step)
-                    beholder.update(sess)
+                    # beholder.update(sess)
 
-                if batch > pre_train_steps and batch % save_pred_steps == 0:
+                if batch > pre_train_steps and batch % save_pred_steps == 0\
+                        or batch == num_batches:
                     flags = dict({'testing_flag:0': True})
                     summaries, prediction, label, input_with_noise, accuracy = sess.run(
                         [merged_with_imgs, Pred, Y, X, pred_loss], feed_dict=flags)
                     for summary in summaries:
-                        test_writer.add_summary(summary, batch)
+                        test_writer.add_summary(summary, batch + starting_batch)
                     input_sequences[str(batch)] = np.array(input_with_noise)
                     predicted_sequences[str(batch)] = np.array(prediction)
                     label_sequences[str(batch)] = np.array(label)
@@ -315,17 +382,22 @@ def train(net_name=_net_name,
                     flags = dict({'testing_flag:0': True})
                     summaries, accuracy = sess.run([merged_with_imgs, loss_over_time], feed_dict=flags)
                     for summary in summaries:
-                        test_writer.add_summary(summary, batch)
-                    validation_accuracy[str(batch)] = np.array(accuracy)
+                        test_writer.add_summary(summary, batch + starting_batch)
+                    validation_accuracy[str(batch + starting_batch)] = np.array(accuracy)
 
-                if batch % checkpoint_int == 0:
-                    saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch)))
+                if batch > pre_train_steps and batch % checkpoint_int == 0:
+                    saver.save(sess, save_path=J(LOG_DIR, 'network', str(batch + starting_batch)))
+            # Completed Training
+            # print('Saving the graph here:', J(LOG_DIR, 'network', str(num_batches + starting_batch)))
+            saver.save(sess, save_path=J(LOG_DIR, 'network', str(num_batches + starting_batch)))
+
         finally:
-            np.savez_compressed(J(LOG_DIR, 'train_accuracy_by_time'), **train_accuracy)
-            np.savez_compressed(J(LOG_DIR, 'validation_accuracy_by_time'), **validation_accuracy)
-            np.savez_compressed(J(LOG_DIR, 'predictions'), **predicted_sequences)
-            np.savez_compressed(J(LOG_DIR, 'labels'), **label_sequences)
-            np.savez_compressed(J(LOG_DIR, 'inputs'), **input_sequences)
+            np.savez_compressed(J(LOG_DIR, 'train_accuracy_by_time_' + str(batch + starting_batch)), **train_accuracy)
+            np.savez_compressed(J(LOG_DIR, 'validation_accuracy_by_time_' + str(batch + starting_batch)),
+                                **validation_accuracy)
+            np.savez_compressed(J(LOG_DIR, 'predictions_' + str(batch + starting_batch)), **predicted_sequences)
+            np.savez_compressed(J(LOG_DIR, 'labels_' + str(batch + starting_batch)), **label_sequences)
+            np.savez_compressed(J(LOG_DIR, 'inputs_' + str(batch + starting_batch)), **input_sequences)
 
 
 if __name__ == "__main__":
