@@ -99,15 +99,12 @@ pre_train_steps = 500
 save_pred_steps = 10000
 #######################
 use_split_pred = False
-a = 0.0001  # GradNorm Weight
-b = 0.00000000  # Prediction Weight
-g = 0.005  # Scale for Phi
 lr = 0.001  # Learning Rate
 #######################
 
 ########################################################################################################################
 
-_net_name = 'lin_relu_cell'
+_net_name = 'TEST'
 _save_dir = os.path.join('experiments', 'turbulence', 'pde')
 
 
